@@ -1,0 +1,197 @@
+# Thiết kế cơ sở dữ liệu BrewLite
+
+## 1. Công nghệ và nguyên tắc
+
+- PostgreSQL là nguồn sự thật duy nhất cho dữ liệu giao dịch.
+- Prisma quản lý schema, migration và transaction.
+- Tiền lưu bằng `BIGINT` theo VND; không dùng `float`/`double`.
+- Thời gian dùng `timestamptz`, UTC.
+- UUID làm khóa chính; mã hiển thị như `order_number` có unique constraint riêng.
+- Xóa cứng chỉ áp dụng cho dữ liệu test. Product/topping/user dùng `is_active` để vô hiệu hóa.
+- Bảng giao dịch và lịch sử không cascade delete trong production.
+
+ERD đầy đủ nằm tại [erd.md](./erd.md), đặc tả trường tại [entities.md](./entities.md).
+
+## 2. Danh sách bảng
+
+| Nhóm | Bảng |
+|---|---|
+| Identity | `users` |
+| Catalog | `products`, `product_variants`, `toppings`, `product_toppings` |
+| Order | `orders`, `order_items`, `order_item_toppings`, `order_status_histories` |
+| Payment | `payments` |
+| Inventory | `inventory_reservations` |
+| Promotion | `coupons`, `coupon_redemptions` |
+| Loyalty | `loyalty_transactions` |
+
+## 3. Ràng buộc dữ liệu bắt buộc
+
+### Unique
+
+- `users(lower(email))` hoặc dùng extension `citext` và unique `email`.
+- `products.sku`, `toppings.code`, `coupons.code`, `orders.order_number`.
+- `product_variants(product_id, size)`.
+- `product_toppings(product_id, topping_id)`.
+- `payments.idempotency_key`.
+- `payments.gateway_transaction_id` khi khác null.
+- `coupon_redemptions.order_id`.
+- `inventory_reservations(order_id, product_variant_id)`.
+
+Partial unique index cần migration SQL thủ công:
+
+```sql
+CREATE UNIQUE INDEX uq_one_successful_payment_per_order
+ON payments (order_id)
+WHERE status = 'SUCCEEDED';
+
+CREATE UNIQUE INDEX uq_loyalty_earn_per_order
+ON loyalty_transactions (order_id, type)
+WHERE order_id IS NOT NULL AND type = 'EARN';
+```
+
+### Check
+
+```sql
+CHECK (stock >= 0)
+CHECK (version >= 0)
+CHECK (quantity > 0)
+CHECK (base_price >= 0)
+CHECK (subtotal >= 0 AND discount_amount >= 0 AND total >= 0)
+CHECK (discount_amount <= subtotal)
+CHECK (total = subtotal - discount_amount)
+CHECK (currency = 'VND')
+CHECK (starts_at < ends_at)
+```
+
+PostgreSQL không cho check constraint tham chiếu bảng khác, nên điều kiện `product.base_price + variant.price_delta >= 0` và tổng order item được kiểm tra ở Service, sau đó bảo vệ thêm bằng test.
+
+### Foreign key và hành vi xóa
+
+| Quan hệ | On delete |
+|---|---|
+| Product -> ProductVariant/ProductTopping | `RESTRICT`; dùng `is_active` |
+| Order -> OrderItem/StatusHistory/Reservation | `RESTRICT` trong production |
+| OrderItem -> OrderItemTopping | `RESTRICT` |
+| User -> Order/Payment-related ledger | `RESTRICT` |
+| Coupon -> Redemption | `RESTRICT` |
+
+Không dùng cascade từ User/Product vào dữ liệu lịch sử vì sẽ phá audit. Nếu cần xóa dữ liệu cá nhân, ẩn danh hóa trường nhận diện thay vì xóa giao dịch.
+
+## 4. Index phục vụ truy vấn
+
+| Index | Truy vấn phục vụ |
+|---|---|
+| `products(is_active, created_at)` | Danh sách menu |
+| `product_variants(product_id, is_active)` | Chi tiết sản phẩm |
+| `orders(user_id, created_at DESC)` | `GET /orders/me` |
+| `orders(status, created_at)` | Hàng đợi barista |
+| `payments(order_id, created_at DESC)` | Lịch sử attempt theo order |
+| `order_status_histories(order_id, created_at)` | Timeline trạng thái |
+| `inventory_reservations(status, expires_at)` | Job giải phóng reservation hết hạn |
+| `coupon_redemptions(coupon_id, user_id)` | Kiểm tra giới hạn coupon/user |
+| `loyalty_transactions(user_id, created_at DESC)` | Lịch sử điểm |
+
+Không tạo index dư thừa trên cột ít phân biệt như boolean đơn lẻ. Dùng `EXPLAIN ANALYZE` để xác nhận trước khi bổ sung.
+
+## 5. Transaction tạo đơn
+
+Transaction cần ngắn và không gọi HTTP bên ngoài:
+
+```text
+BEGIN
+  đọc product/variant/topping active
+  tính snapshot giá, subtotal, coupon, total
+  kiểm tra/ghi coupon_redemption nếu có
+  với từng variant:
+    UPDATE product_variants
+      SET stock = stock - qty, version = version + 1
+      WHERE id = :id AND version = :expectedVersion AND stock >= :qty
+    nếu row_count = 0: conflict/hết hàng
+  INSERT order + items + item_toppings
+  INSERT inventory_reservations(status=ACTIVE)
+  INSERT order_status_history(NULL -> PENDING)
+COMMIT
+```
+
+Nếu optimistic conflict, Service retry toàn transaction tối đa 2-3 lần với jitter nhỏ. Hết retry trả `409 INVENTORY_CONFLICT`; hết hàng trả `409 OUT_OF_STOCK` kèm variant bị thiếu.
+
+Thứ tự lock/update variant luôn theo `product_variant_id` tăng dần để giảm deadlock khi nhiều đơn chứa cùng tập sản phẩm.
+
+## 6. Transaction hoàn tồn kho
+
+Hàm release phải idempotent:
+
+```text
+UPDATE inventory_reservations
+SET status = RELEASED
+WHERE id = :id AND status = ACTIVE
+
+nếu row_count = 1:
+  UPDATE product_variants
+  SET stock = stock + reservation.quantity, version = version + 1
+```
+
+Hai update nằm trong cùng transaction. Nếu reservation đã `RELEASED`, `EXPIRED` hoặc `CONSUMED`, không cộng stock lần nữa.
+
+Job định kỳ tìm `ACTIVE AND expires_at < now()`, khóa bằng `FOR UPDATE SKIP LOCKED` (hoặc claim theo batch) rồi chuyển `EXPIRED` và hoàn tồn. Trong MVP có thể chạy cron của NestJS; nhiều instance vẫn an toàn nhờ điều kiện trạng thái.
+
+## 7. Transaction hoàn tất thanh toán
+
+Không giữ transaction khi gọi mock gateway. Sau khi nhận kết quả:
+
+```text
+BEGIN
+  đọc payment theo idempotency key và order hiện tại
+  nếu payment đã kết thúc: trả kết quả cũ
+  nếu thành công:
+    payment -> SUCCEEDED
+    order PENDING -> PAID
+    reservation ACTIVE -> CONSUMED
+    ghi status history
+    ghi loyalty EARN nếu chưa tồn tại
+    cập nhật users.loyalty_balance
+  nếu thất bại:
+    payment -> FAILED
+    order PENDING -> PAYMENT_FAILED
+    ghi status history
+COMMIT
+```
+
+Unique constraints là lớp bảo vệ cuối cho một payment thành công và một lần cộng điểm trên mỗi order.
+
+## 8. Idempotency-Key
+
+- Key do client sinh UUID, gửi ở header `Idempotency-Key`.
+- `request_hash = SHA-256(canonical JSON của orderId + method + amount)`.
+- Insert payment dùng unique key. Nếu conflict, đọc payment đã tồn tại.
+- Cùng key/cùng hash: trả lại cùng HTTP body/status nghiệp vụ.
+- Cùng key/khác hash: `409 IDEMPOTENCY_KEY_REUSED`.
+- Không xóa payment/idempotency record trong thời gian tồn tại order. Với hệ thống thật có thể đặt retention tối thiểu theo chính sách đối soát.
+
+## 9. Sinh order number
+
+PK vẫn là UUID. `order_number` chỉ dùng hiển thị, ví dụ `BL-20260923-AB12CD`. Backend sinh chuỗi khó đoán vừa đủ và dựa vào unique constraint để retry khi va chạm. Không dùng `COUNT(*) + 1` vì race condition.
+
+## 10. Migration và seed
+
+1. Mỗi thay đổi schema phải đi qua Prisma migration được commit.
+2. Không sửa migration đã chạy trên môi trường chung; tạo migration bù.
+3. Seed phải chạy lặp an toàn bằng upsert theo `sku`, `code`, `email`.
+4. Seed tối thiểu: user demo, 4 sản phẩm, đủ size S/M/L, topping, một coupon còn hạn.
+5. CI chạy database tạm, migrate từ rỗng, seed và integration test.
+6. Trước thay đổi phá vỡ, có backup/rollback plan; migration expand-contract khi cần tương thích nhiều phiên bản.
+
+## 11. Phân trang và hiệu năng
+
+- `GET /products`: offset pagination đủ cho dữ liệu mẫu; có `limit` tối đa.
+- `GET /orders/me`: ưu tiên cursor `(created_at, id)` để ổn định khi có đơn mới.
+- Chỉ select trường cần thiết; include item/topping theo trang, tránh N+1.
+- Response danh sách không trả password hash, request hash, chi tiết gateway hoặc audit nội bộ.
+- NFR `< 500ms` được đo ở p95 trên dữ liệu seed xác định; không chỉ dựa vào thời gian thủ công.
+
+## 12. Rủi ro mô hình và hướng nâng cấp
+
+- `users.loyalty_balance` là dữ liệu dẫn xuất có thể lệch ledger: thêm job đối soát tổng ledger định kỳ.
+- Stock theo variant chưa phản ánh nguyên liệu dùng chung: khi mở rộng, thêm `ingredients`, `recipes`, `inventory_balances` và reservation theo ingredient.
+- Một cửa hàng duy nhất: khi đa chi nhánh, mọi balance/reservation phải có `store_id` và unique key tương ứng.
+- Mock payment không có webhook: cổng thật cần bảng event/webhook idempotent và trạng thái `PENDING/UNKNOWN` chi tiết hơn.

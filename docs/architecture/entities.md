@@ -1,0 +1,219 @@
+# Đặc tả entity BrewLite
+
+## 1. Quy ước kiểu dữ liệu
+
+- `uuid`: UUID v4 hoặc UUID v7; sinh tại backend/database.
+- `money`: `BIGINT`, đơn vị VND; ví dụ `35000` là 35.000đ.
+- `timestamp`: PostgreSQL `timestamptz`, lưu UTC.
+- Chuỗi có giới hạn độ dài ở DTO và database.
+- Trường `createdAt`, `updatedAt` có ở aggregate root và entity có vòng đời độc lập.
+
+## 2. Enum dùng chung
+
+```text
+UserRole = CUSTOMER | BARISTA | ADMIN
+ProductSize = S | M | L
+OrderStatus = PENDING | PAYMENT_FAILED | PAID | PREPARING | READY | COMPLETED | CANCELLED
+PaymentMethod = E_WALLET | CARD
+PaymentStatus = PROCESSING | SUCCEEDED | FAILED
+ReservationStatus = ACTIVE | CONSUMED | RELEASED | EXPIRED
+DiscountType = PERCENTAGE | FIXED_AMOUNT
+LoyaltyTransactionType = EARN | REDEEM | ADJUSTMENT | REVERSAL
+```
+
+## 3. Nhóm tài khoản
+
+### User
+
+| Thuộc tính | Kiểu | Bắt buộc | Quy tắc |
+|---|---|---:|---|
+| `id` | uuid | Có | PK |
+| `email` | citext | Có | Unique, normalize lowercase/trim |
+| `passwordHash` | string | Có | Không bao giờ trả ra API |
+| `role` | UserRole | Có | Mặc định `CUSTOMER` |
+| `loyaltyBalance` | int | Có | Cache số dư, `>= 0`; nguồn sự thật là ledger |
+| `isActive` | boolean | Có | Mặc định `true` |
+| `createdAt`, `updatedAt` | timestamp | Có | Audit |
+
+Invariant: email hợp lệ; password chỉ tồn tại ở dạng hash; user bị khóa không được đăng nhập/tạo đơn mới.
+
+## 4. Nhóm catalog
+
+### Product
+
+| Thuộc tính | Kiểu | Quy tắc |
+|---|---|---|
+| `id` | uuid | PK |
+| `sku` | varchar(50) | Unique, ổn định |
+| `name` | varchar(150) | Không rỗng |
+| `description` | text | Nullable |
+| `basePrice` | money | `>= 0` |
+| `imageUrl` | varchar(500) | URL HTTPS hoặc đường dẫn asset hợp lệ |
+| `isActive` | boolean | Ẩn mềm khỏi menu |
+| `createdAt`, `updatedAt` | timestamp | Audit |
+
+### ProductVariant
+
+| Thuộc tính | Kiểu | Quy tắc |
+|---|---|---|
+| `id` | uuid | PK |
+| `productId` | uuid | FK Product |
+| `size` | ProductSize | Unique cùng product |
+| `priceDelta` | money | Có thể bằng 0; giá bán = basePrice + priceDelta |
+| `stock` | int | `>= 0` |
+| `version` | int | Tăng sau mỗi thay đổi stock, dùng optimistic locking |
+| `isActive` | boolean | Không cho thêm vào đơn mới nếu false |
+
+Invariant: `basePrice + priceDelta >= 0`; stock không âm; variant inactive vẫn được giữ để lịch sử order tham chiếu.
+
+### Topping
+
+| Thuộc tính | Kiểu | Quy tắc |
+|---|---|---|
+| `id` | uuid | PK |
+| `code` | varchar(50) | Unique |
+| `name` | varchar(100) | Không rỗng |
+| `price` | money | `>= 0` |
+| `isActive` | boolean | Mặc định true |
+
+### ProductTopping
+
+Bảng nối gồm `productId`, `toppingId`; composite PK. Chỉ topping có trong bảng nối và đang active mới được chọn cho sản phẩm.
+
+## 5. Aggregate Order
+
+### Order
+
+Order là aggregate root quản lý item, tổng tiền, trạng thái và transition.
+
+| Thuộc tính | Kiểu | Quy tắc |
+|---|---|---|
+| `id` | uuid | PK |
+| `orderNumber` | varchar(30) | Unique, mã hiển thị cho khách; không dùng làm PK |
+| `userId` | uuid | FK User, không đổi |
+| `status` | OrderStatus | Mọi thay đổi qua state machine |
+| `subtotal` | money | Tổng item trước giảm giá |
+| `discountAmount` | money | `0..subtotal` |
+| `total` | money | `subtotal - discountAmount` |
+| `currency` | char(3) | `VND` trong MVP |
+| `couponCodeSnapshot` | varchar(50) | Nullable |
+| `reservationExpiresAt` | timestamp | Thời điểm tự hoàn tồn nếu chưa trả tiền |
+| `createdAt`, `updatedAt` | timestamp | Audit |
+
+Không lưu `loyaltyPointsEarned` như nguồn sự thật trên order; số điểm tra từ ledger để tránh cộng lặp.
+
+### OrderItem
+
+| Thuộc tính | Kiểu | Quy tắc |
+|---|---|---|
+| `id` | uuid | PK |
+| `orderId` | uuid | FK Order |
+| `productVariantId` | uuid | FK ProductVariant |
+| `productNameSnapshot` | varchar(150) | Tên lúc đặt |
+| `variantNameSnapshot` | varchar(50) | Ví dụ `M` |
+| `unitPrice` | money | Giá variant trước topping |
+| `quantity` | int | `> 0`, giới hạn ở DTO |
+| `lineTotal` | money | `(unitPrice + tổng topping đơn vị) * quantity` |
+
+### OrderItemTopping
+
+| Thuộc tính | Kiểu | Quy tắc |
+|---|---|---|
+| `id` | uuid | PK |
+| `orderItemId` | uuid | FK OrderItem |
+| `toppingId` | uuid | FK Topping |
+| `toppingNameSnapshot` | varchar(100) | Tên lúc đặt |
+| `unitPrice` | money | Giá lúc đặt |
+| `quantity` | int | Số topping trên một đơn vị món, `> 0` |
+| `lineTotal` | money | `unitPrice * quantity * orderItem.quantity` |
+
+### OrderStatusHistory
+
+| Thuộc tính | Kiểu | Quy tắc |
+|---|---|---|
+| `id` | uuid | PK |
+| `orderId` | uuid | FK Order |
+| `fromStatus` | OrderStatus? | Null ở bản ghi khởi tạo |
+| `toStatus` | OrderStatus | Trạng thái mới |
+| `changedByUserId` | uuid? | Null nếu hệ thống/payment đổi trạng thái |
+| `reason` | varchar(255)? | Bắt buộc khi hủy/thất bại thủ công |
+| `createdAt` | timestamp | Thời điểm transition |
+
+## 6. Thanh toán và tồn kho
+
+### Payment
+
+Mỗi bản ghi là một lần thử thanh toán; một order có thể có nhiều lần thử.
+
+| Thuộc tính | Kiểu | Quy tắc |
+|---|---|---|
+| `id` | uuid | PK |
+| `orderId` | uuid | FK Order |
+| `idempotencyKey` | varchar(100) | Unique, bắt buộc |
+| `requestHash` | char(64) | SHA-256 của payload chuẩn hóa |
+| `method` | PaymentMethod | Ví hoặc thẻ |
+| `status` | PaymentStatus | PROCESSING/SUCCEEDED/FAILED |
+| `amount` | money | Phải bằng `order.total` |
+| `gatewayTransactionId` | varchar(100)? | Unique khi có |
+| `failureCode` | varchar(100)? | Mã lỗi ổn định, không chứa dữ liệu nhạy cảm |
+| `processedAt` | timestamp? | Có khi kết thúc |
+| `createdAt`, `updatedAt` | timestamp | Audit |
+
+Invariant: tối đa một payment `SUCCEEDED` cho mỗi order; key cũ cùng hash trả kết quả cũ; key cũ khác hash bị từ chối.
+
+### InventoryReservation
+
+| Thuộc tính | Kiểu | Quy tắc |
+|---|---|---|
+| `id` | uuid | PK |
+| `orderId` | uuid | FK Order |
+| `productVariantId` | uuid | FK ProductVariant |
+| `quantity` | int | `> 0` |
+| `status` | ReservationStatus | Chỉ transition hợp lệ |
+| `expiresAt` | timestamp | Thời điểm hết giữ tồn |
+| `createdAt`, `updatedAt` | timestamp | Audit |
+
+Transition: `ACTIVE -> CONSUMED` khi paid; `ACTIVE -> RELEASED` khi hủy; `ACTIVE -> EXPIRED` khi timeout. Mỗi transition hoàn/trừ tồn tối đa một lần.
+
+## 7. Khuyến mãi và loyalty
+
+### Coupon
+
+| Thuộc tính | Kiểu | Quy tắc |
+|---|---|---|
+| `code` | varchar(50) | Unique, uppercase |
+| `discountType` | DiscountType | Phần trăm hoặc số tiền cố định |
+| `discountValue` | bigint | `> 0`; percentage `<= 100` |
+| `maxDiscount` | money? | Trần giảm cho phần trăm |
+| `minOrderValue` | money | Mặc định 0 |
+| `usageLimit` | int? | Tổng lượt dùng; null là không giới hạn |
+| `perUserLimit` | int | Mặc định 1 |
+| `startsAt`, `endsAt` | timestamp | `startsAt < endsAt` |
+| `isActive` | boolean | Công tắc vận hành |
+
+### CouponRedemption
+
+Gồm `couponId`, `userId`, `orderId`, `discountAmount`, `createdAt`. `orderId` unique để mỗi order chỉ có một coupon. Việc đếm giới hạn và ghi redemption nằm cùng transaction tạo order.
+
+### LoyaltyTransaction
+
+| Thuộc tính | Kiểu | Quy tắc |
+|---|---|---|
+| `id` | uuid | PK |
+| `userId` | uuid | FK User |
+| `orderId` | uuid? | FK Order khi phát sinh từ đơn |
+| `type` | LoyaltyTransactionType | EARN/REDEEM/ADJUSTMENT/REVERSAL |
+| `points` | int | Có dấu: cộng dương, trừ âm |
+| `balanceAfter` | int | `>= 0` |
+| `reason` | varchar(255) | Mô tả ngắn |
+| `createdAt` | timestamp | Bất biến |
+
+Ledger không sửa/xóa. Sai sót được bù bằng một `REVERSAL` hoặc `ADJUSTMENT` mới. Unique theo `(orderId, type)` với giao dịch từ đơn để chống xử lý lặp.
+
+## 8. Aggregate và ownership
+
+- `Order` sở hữu OrderItem, OrderItemTopping và OrderStatusHistory; không sửa trực tiếp child ngoài aggregate service.
+- `Payment` là aggregate riêng vì có vòng đời và idempotency độc lập.
+- `Product` quản lý variant/topping khả dụng; Order chỉ giữ FK và snapshot.
+- `User` không nhúng danh sách order/payment; truy vấn dùng repository theo ID và phân trang.
+- `InventoryReservation`, CouponRedemption và LoyaltyTransaction là sổ ghi nghiệp vụ, cập nhật qua Service trong transaction.
