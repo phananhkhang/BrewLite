@@ -2,7 +2,7 @@
 
 BrewLite là ứng dụng web đặt đồ uống và thanh toán không tiền mặt, được xây dựng cho bài tập lớn môn Công nghệ Phần mềm. Sản phẩm hướng tới luồng đặt món nhanh tại quầy: xem menu, chọn size/topping, quản lý giỏ hàng, đăng nhập, tạo đơn, thanh toán và theo dõi trạng thái.
 
-> Trạng thái hiện tại: đã hoàn thành tài liệu kiến trúc, cây thư mục, `.gitignore` và `.env.example`; chưa scaffold mã nguồn Next.js/NestJS nên dự án chưa thể chạy.
+> Trạng thái hiện tại: đã scaffold Next.js/NestJS, có health endpoint và cấu hình Docker chạy được. Các module nghiệp vụ và Prisma schema sẽ được triển khai theo Sprint Backlog.
 
 ## Công nghệ dự kiến
 
@@ -131,14 +131,14 @@ Mọi chuyển trạng thái phải đi qua `OrderService` và được ghi vào
 
 ## Khởi chạy dự án
 
-Phần mã nguồn và cấu hình chạy chưa được scaffold. Sau khi hoàn thành Task 1, quy trình dự kiến là:
+Chạy toàn bộ stack bằng:
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-Các lệnh chính thức phải được cập nhật tại đây ngay khi `package.json`, Dockerfile và `docker-compose.yml` được tạo. Không xem các lệnh trên là đã khả dụng ở trạng thái hiện tại.
+Kiểm tra trạng thái bằng `docker compose ps`. Frontend chạy tại `http://localhost:3000`, backend tại `http://localhost:3001/api/v1` và health endpoint là `http://localhost:3001/api/v1/health`.
 
 ## Quy ước phát triển
 

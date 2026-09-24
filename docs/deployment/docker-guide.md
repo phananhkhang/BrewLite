@@ -1,6 +1,6 @@
 # Hướng dẫn Docker cho BrewLite
 
-> Repository hiện chưa có mã nguồn và `docker-compose.yml`. Tài liệu này là hợp đồng triển khai để nhóm hiện thực ở Task 1 và hoàn thiện ở Task 9.
+> Cấu hình Docker, frontend Next.js và backend NestJS đã được scaffold. Prisma/migration sẽ được bổ sung khi triển khai tầng database nghiệp vụ.
 
 ## 1. Topology
 
@@ -15,7 +15,7 @@ flowchart LR
 | Service | Port host | Healthcheck | Phụ thuộc |
 |---|---:|---|---|
 | `frontend` | 3000 | HTTP `/` hoặc `/health` | `backend` healthy |
-| `backend` | 3001 | HTTP `/api/v1/health` | `postgres` healthy + migration |
+| `backend` | 3001 | HTTP `/api/v1/health` | `postgres` healthy |
 | `postgres` | chỉ mở 5432 khi dev cần | `pg_isready` | volume dữ liệu |
 
 Trong production không công khai trực tiếp PostgreSQL. Reverse proxy/TLS termination nằm ngoài phạm vi MVP.
@@ -28,12 +28,17 @@ Trong production không công khai trực tiếp PostgreSQL. Reverse proxy/TLS t
 NODE_ENV=development
 WEB_PORT=3000
 API_PORT=3001
+POSTGRES_PORT=5432
 NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
-DATABASE_URL=postgresql://brewlite:change-me@postgres:5432/brewlite
+WEB_ORIGIN=http://localhost:3000
+POSTGRES_DB=brewlite
+POSTGRES_USER=brewlite
+POSTGRES_PASSWORD=change_me_local_only
+DATABASE_URL=postgresql://brewlite:change_me_local_only@postgres:5432/brewlite?schema=public
 JWT_ISSUER=brewlite-api
 JWT_AUDIENCE=brewlite-web
-JWT_ACCESS_SECRET=replace-with-a-long-random-secret
-JWT_ACCESS_TTL=15m
+JWT_SECRET=replace_with_a_long_random_secret
+JWT_EXPIRES_IN=15m
 MOCK_PAYMENT_MODE=deterministic
 ORDER_RESERVATION_TTL_MINUTES=15
 ```
@@ -42,15 +47,13 @@ Không commit file `.env` thật. Secret cho môi trường chia sẻ phải c�
 
 ## 3. Quy trình khởi động dự kiến
 
-Sau khi nhóm tạo Compose:
+Khởi động stack hiện tại:
 
 ```bash
 docker compose up --build
-docker compose exec backend npm run prisma:migrate:deploy
-docker compose exec backend npm run prisma:seed
 ```
 
-Có thể dùng container migration one-shot thay vì chạy tay. Backend chỉ nhận traffic sau khi migration thành công; không để nhiều replica đồng thời chạy migration dev.
+Backend hiện chờ PostgreSQL healthy trước khi khởi động. Khi Prisma được thêm, tạo migration one-shot service và chỉ cho backend nhận traffic sau khi migration hoàn tất; không để nhiều replica đồng thời chạy migration.
 
 ## 4. Yêu cầu cho Dockerfile
 
@@ -60,7 +63,7 @@ Có thể dùng container migration one-shot thay vì chạy tay. Backend chỉ 
 - Copy lockfile và dùng install frozen/locked.
 - Không bake `.env`, secret hoặc credential vào image.
 - Có `.dockerignore` loại `node_modules`, `.git`, log, coverage và file môi trường.
-- Healthcheck phản ánh readiness: backend kiểm tra kết nối database, frontend kiểm tra process phục vụ request.
+- Healthcheck phản ánh readiness. Hiện backend kiểm tra process/API; sau khi tích hợp Prisma, health endpoint phải kiểm tra thêm kết nối database.
 
 ## 5. Dữ liệu và migration
 
@@ -83,5 +86,5 @@ Có thể dùng container migration one-shot thay vì chạy tay. Backend chỉ 
 
 - Backend không kết nối DB: kiểm tra hostname trong container phải là `postgres`, không phải `localhost`.
 - Frontend SSR không gọi được API: dùng URL nội bộ `http://backend:3001`; code chạy trong browser dùng URL public.
-- Schema thiếu: kiểm tra migration container/command đã hoàn tất trước backend readiness.
+- Sau khi tích hợp Prisma, nếu schema thiếu: kiểm tra migration container/command đã hoàn tất trước backend readiness.
 - Port bận: đổi port phía host, giữ nguyên port mạng nội bộ Compose.

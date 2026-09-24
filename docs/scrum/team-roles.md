@@ -12,6 +12,8 @@ Tài liệu này dùng để ghi nhận vai trò thực tế của nhóm. Đề 
 
 > Một sinh viên có thể kiêm PO hoặc SM trong phạm vi bài tập, nhưng toàn nhóm vẫn cùng chịu trách nhiệm chất lượng Increment.
 
+Chi tiết phần việc kỹ thuật của 5 thành viên trong từng Sprint được mô tả tại [Phân công nhóm 5 thành viên theo Sprint](./team-assignment-by-sprint.md).
+
 ## Stakeholders cần lấy phản hồi
 
 - Khách hàng sử dụng BrewLite.

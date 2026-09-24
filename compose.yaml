@@ -1,0 +1,109 @@
+name: brewlite
+
+x-service-defaults: &service-defaults
+  init: true
+  restart: unless-stopped
+  networks:
+    - brewlite-network
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  postgres:
+    image: postgres:18.4-alpine3.23
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-brewlite}
+      POSTGRES_USER: ${POSTGRES_USER:-brewlite}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_local_only}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - brewlite-network
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  backend:
+    <<: *service-defaults
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    image: brewlite-api:local
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://brewlite:change_me_local_only@postgres:5432/brewlite?schema=public}
+      JWT_SECRET: ${JWT_SECRET:-replace_with_a_long_random_secret}
+      JWT_ISSUER: ${JWT_ISSUER:-brewlite-api}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-brewlite-web}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      MOCK_PAYMENT_MODE: ${MOCK_PAYMENT_MODE:-deterministic}
+      ORDER_RESERVATION_TTL_MINUTES: ${ORDER_RESERVATION_TTL_MINUTES:-15}
+    ports:
+      - "${API_PORT:-3001}:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3001/api/v1/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  frontend:
+    <<: *service-defaults
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api/v1}
+    image: brewlite-web:local
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      API_INTERNAL_URL: http://backend:3001/api/v1
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api/v1}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+networks:
+  brewlite-network:
+    driver: bridge
+
+volumes:
+  postgres-data:

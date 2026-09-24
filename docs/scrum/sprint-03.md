@@ -1,5 +1,7 @@
 # Sprint 3
 
+**Thời lượng:** 2 tuần (Tuần 5–6 của dự án, tương đương 10 ngày làm việc dự kiến).
+
 ## Sprint Goal
 
 Hoàn thiện thanh toán, lịch sử, Docker và chứng minh các nghiệp vụ backend nâng cao.
@@ -18,6 +20,7 @@ Trạng thái dùng thống nhất: `TODO -> IN_PROGRESS -> REVIEW -> DONE`. Ch�
 
 - Ngày bắt đầu: _Điền khi chốt Sprint_.
 - Ngày kết thúc: _Điền khi chốt Sprint_.
+- Mốc giữa Sprint: cuối Tuần 5 phải demo nội bộ được thanh toán và lịch sử đơn bản đầu tiên.
 - Tổng story point cam kết: _Lấy từ Product Backlog_.
 - Link board/issue/PR: _Điền link thực tế_.
 - Burndown: cập nhật theo [hướng dẫn burndown](./burndown.md).

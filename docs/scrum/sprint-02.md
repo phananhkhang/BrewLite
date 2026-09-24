@@ -1,5 +1,7 @@
 # Sprint 2
 
+**Thời lượng:** 2 tuần (Tuần 3–4 của dự án, tương đương 10 ngày làm việc dự kiến).
+
 ## Sprint Goal
 
 Hoàn thiện giỏ hàng, xác thực và tạo đơn PENDING từ dữ liệu đã được backend kiểm tra.
@@ -18,6 +20,7 @@ Trạng thái dùng thống nhất: `TODO -> IN_PROGRESS -> REVIEW -> DONE`. Ch�
 
 - Ngày bắt đầu: _Điền khi chốt Sprint_.
 - Ngày kết thúc: _Điền khi chốt Sprint_.
+- Mốc giữa Sprint: cuối Tuần 3 phải đăng nhập được với backend thật và cart persist sau reload.
 - Tổng story point cam kết: _Lấy từ Product Backlog_.
 - Link board/issue/PR: _Điền link thực tế_.
 - Burndown: cập nhật theo [hướng dẫn burndown](./burndown.md).

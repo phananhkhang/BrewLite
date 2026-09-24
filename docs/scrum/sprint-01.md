@@ -1,5 +1,7 @@
 # Sprint 1
 
+**Thời lượng:** 2 tuần (Tuần 1–2 của dự án, tương đương 10 ngày làm việc dự kiến).
+
 ## Sprint Goal
 
 Nền tảng dự án chạy được và người dùng xem/chọn được sản phẩm.
@@ -19,6 +21,7 @@ Trạng thái dùng thống nhất: `TODO -> IN_PROGRESS -> REVIEW -> DONE`. Ch�
 
 - Ngày bắt đầu: _Điền khi chốt Sprint_.
 - Ngày kết thúc: _Điền khi chốt Sprint_.
+- Mốc giữa Sprint: cuối Tuần 1 phải tích hợp được Catalog API bản đầu tiên với frontend.
 - Tổng story point cam kết: _Lấy từ Product Backlog_.
 - Link board/issue/PR: _Điền link thực tế_.
 - Burndown: cập nhật theo [hướng dẫn burndown](./burndown.md).

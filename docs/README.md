@@ -1,6 +1,6 @@
 # Tài liệu dự án BrewLite
 
-Thư mục này mô tả kiến trúc đích của BrewLite dựa trên đề bài phiên bản 1.0. Hiện repository chưa có mã nguồn triển khai, vì vậy tài liệu là đường cơ sở để nhóm thống nhất cách xây dựng trước khi lập trình.
+Thư mục này mô tả kiến trúc đích của BrewLite dựa trên đề bài phiên bản 1.0. Repository đã có scaffold Next.js/NestJS và Docker; các tài liệu là đường cơ sở để nhóm triển khai module nghiệp vụ theo từng Sprint.
 
 ## Lộ trình đọc
 
@@ -32,6 +32,7 @@ Kiến trúc này bao phủ luồng: xem menu -> chọn size/topping -> giỏ h�
 ## Tài liệu Scrum thực thi
 
 - [Vai trò Scrum](./scrum/team-roles.md)
+- [Phân công nhóm 5 thành viên theo Sprint](./scrum/team-assignment-by-sprint.md)
 - [Sprint 1](./scrum/sprint-01.md)
 - [Sprint 2](./scrum/sprint-02.md)
 - [Sprint 3](./scrum/sprint-03.md)
