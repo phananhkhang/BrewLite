@@ -9,7 +9,7 @@
 
 ## 2. Xác thực
 
-- Mật khẩu băm bằng Argon2id; nếu dùng bcrypt theo đề bài, chọn cost phù hợp với môi trường và đo thời gian hash. Mỗi hash tự chứa salt ngẫu nhiên.
+- Mật khẩu băm bằng bcrypt theo yêu cầu đề bài; chọn cost phù hợp với môi trường và đo thời gian hash. Mỗi hash tự chứa salt ngẫu nhiên.
 - Không log password, token, cookie, Authorization header hoặc dữ liệu thẻ.
 - Access token JWT sống ngắn (gợi ý 15 phút), ký bằng secret/key lấy từ secret store hoặc biến môi trường.
 - Claim tối thiểu: `sub`, `role`, `iat`, `exp`, `iss`, `aud`, `jti`.

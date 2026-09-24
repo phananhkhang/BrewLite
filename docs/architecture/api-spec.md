@@ -286,8 +286,10 @@ Kết quả gateway từ chối vẫn là request được xử lý hợp lệ, 
 
 Quy tắc retry:
 
-- Cùng key, cùng payload: trả đúng kết quả payment đã lưu, không gọi gateway lần hai.
+- Cùng key, cùng payload: trả đúng kết quả payment đã lưu, không gọi gateway lần hai. Key cũ **không** được dùng để thử thanh toán lại.
 - Cùng key, khác payload: `409 IDEMPOTENCY_KEY_REUSED`.
+- Sau một payment `FAILED`, client tạo **Idempotency-Key mới**. Trước attempt mới, `PaymentService` khóa order và transition `PAYMENT_FAILED -> PENDING`, đồng thời ghi `OrderStatusHistory`; sau đó mới tạo payment attempt mới.
+- Nếu reservation đã hết hạn hoặc order đã bị hủy thì không cho retry; trả lỗi nghiệp vụ phù hợp.
 - Key mới cho order đã `PAID`: `409 ORDER_ALREADY_PAID`.
 
 ## 6. Promotion và loyalty (hỗ trợ Task 10)

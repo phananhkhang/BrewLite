@@ -18,6 +18,7 @@ PaymentMethod = E_WALLET | CARD
 PaymentStatus = PROCESSING | SUCCEEDED | FAILED
 ReservationStatus = ACTIVE | CONSUMED | RELEASED | EXPIRED
 DiscountType = PERCENTAGE | FIXED_AMOUNT
+CouponRedemptionStatus = RESERVED | CONSUMED | RELEASED | EXPIRED
 LoyaltyTransactionType = EARN | REDEEM | ADJUSTMENT | REVERSAL
 ```
 
@@ -181,19 +182,34 @@ Transition: `ACTIVE -> CONSUMED` khi paid; `ACTIVE -> RELEASED` khi hủy; `ACTI
 
 | Thuộc tính | Kiểu | Quy tắc |
 |---|---|---|
+| `id` | uuid | PK |
 | `code` | varchar(50) | Unique, uppercase |
 | `discountType` | DiscountType | Phần trăm hoặc số tiền cố định |
 | `discountValue` | bigint | `> 0`; percentage `<= 100` |
 | `maxDiscount` | money? | Trần giảm cho phần trăm |
 | `minOrderValue` | money | Mặc định 0 |
-| `usageLimit` | int? | Tổng lượt dùng; null là không giới hạn |
+| `usageLimit` | int? | Tổng lượt đang giữ + đã dùng; null là không giới hạn |
 | `perUserLimit` | int | Mặc định 1 |
 | `startsAt`, `endsAt` | timestamp | `startsAt < endsAt` |
 | `isActive` | boolean | Công tắc vận hành |
+| `createdAt`, `updatedAt` | timestamp | Audit |
 
 ### CouponRedemption
 
-Gồm `couponId`, `userId`, `orderId`, `discountAmount`, `createdAt`. `orderId` unique để mỗi order chỉ có một coupon. Việc đếm giới hạn và ghi redemption nằm cùng transaction tạo order.
+| Thuộc tính | Kiểu | Quy tắc |
+|---|---|---|
+| `id` | uuid | PK |
+| `couponId` | uuid | FK Coupon |
+| `userId` | uuid | FK User |
+| `orderId` | uuid | FK Order, unique để mỗi order chỉ dùng tối đa một coupon |
+| `discountAmount` | money | Discount đã snapshot khi tạo order |
+| `status` | CouponRedemptionStatus | `RESERVED` khi tạo order |
+| `expiresAt` | timestamp | Đồng bộ với thời hạn reservation của order |
+| `consumedAt` | timestamp? | Ghi khi payment thành công |
+| `releasedAt` | timestamp? | Ghi khi order hủy hoặc reservation được hoàn |
+| `createdAt`, `updatedAt` | timestamp | Audit |
+
+Transition: `RESERVED -> CONSUMED` khi order `PAID`; `RESERVED -> RELEASED` khi hủy; `RESERVED -> EXPIRED` khi order hết thời gian giữ. Khi kiểm tra `usageLimit`/`perUserLimit`, chỉ tính các redemption `RESERVED` hoặc `CONSUMED`, nhờ đó đơn thanh toán thất bại/hủy không chiếm lượt coupon vĩnh viễn.
 
 ### LoyaltyTransaction
 
@@ -216,4 +232,4 @@ Ledger không sửa/xóa. Sai sót được bù bằng một `REVERSAL` hoặc `
 - `Payment` là aggregate riêng vì có vòng đời và idempotency độc lập.
 - `Product` quản lý variant/topping khả dụng; Order chỉ giữ FK và snapshot.
 - `User` không nhúng danh sách order/payment; truy vấn dùng repository theo ID và phân trang.
-- `InventoryReservation`, CouponRedemption và LoyaltyTransaction là sổ ghi nghiệp vụ, cập nhật qua Service trong transaction.
+- `InventoryReservation` và `CouponRedemption` là bản ghi reservation có state machine riêng; `LoyaltyTransaction` là ledger bất biến. Tất cả được cập nhật qua Service trong transaction.

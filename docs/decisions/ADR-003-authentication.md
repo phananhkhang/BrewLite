@@ -10,7 +10,7 @@ Next.js gọi NestJS qua REST. Đề bài yêu cầu đăng ký/đăng nhập JW
 ## Quyết định
 
 - Access token JWT sống ngắn, có `sub`, `role`, `iss`, `aud`, `exp`, `jti`.
-- Mật khẩu băm bằng Argon2id; bcrypt là lựa chọn tương thích đề bài nếu cấu hình cost hợp lý.
+- Mật khẩu băm bằng bcrypt theo yêu cầu đề bài, với cost được cấu hình và kiểm tra trên môi trường chạy.
 - RBAC dùng `CUSTOMER`, `BARISTA`, `ADMIN`; ownership check áp dụng thêm cho tài nguyên order.
 - Refresh token/cookie HttpOnly là phần khuyến nghị nếu triển khai phiên dài.
 

@@ -13,7 +13,8 @@ Thư mục này mô tả kiến trúc đích của BrewLite dựa trên đề b�
 7. [Thiết kế bảo mật](./architecture/security.md): xác thực, phân quyền và biện pháp bảo vệ API.
 8. [Các quyết định kiến trúc](./decisions/ADR-001-project-architecture.md): ADR giải thích các lựa chọn chính.
 9. [Hướng dẫn Docker](./deployment/docker-guide.md): topology chạy local và nguyên tắc cấu hình.
-10. [Tài liệu Scrum](./scrum/product-backlog.md): backlog, user story và Definition of Done.
+10. [Tài liệu Scrum](./scrum/product-backlog.md): backlog, user story, vai trò, kế hoạch Sprint và Definition of Done.
+11. [Chiến lược kiểm thử](./testing/test-strategy.md): cách kiểm chứng acceptance criteria và ba yêu cầu bắt buộc của Task 10.
 
 ## Quy ước chung
 
@@ -27,3 +28,14 @@ Thư mục này mô tả kiến trúc đích của BrewLite dựa trên đề b�
 ## Phạm vi tài liệu
 
 Kiến trúc này bao phủ luồng: xem menu -> chọn size/topping -> giỏ hàng -> đăng nhập -> tạo đơn -> thanh toán giả lập -> xác nhận/lịch sử đơn. Chức năng vận hành Barista/Admin được mô hình hóa ở mức API và phân quyền để hỗ trợ state machine, nhưng UI quản trị không thuộc MVP bắt buộc.
+
+## Tài liệu Scrum thực thi
+
+- [Vai trò Scrum](./scrum/team-roles.md)
+- [Sprint 1](./scrum/sprint-01.md)
+- [Sprint 2](./scrum/sprint-02.md)
+- [Sprint 3](./scrum/sprint-03.md)
+- [Burndown](./scrum/burndown.md)
+- [Definition of Done](./scrum/definition-of-done.md)
+
+Các file Sprint/Retrospective là biểu mẫu ban đầu; nhóm phải cập nhật bằng dữ liệu thật trong quá trình thực hiện, không coi placeholder là bằng chứng Scrum đã hoàn thành.

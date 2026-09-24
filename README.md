@@ -2,7 +2,7 @@
 
 BrewLite là ứng dụng web đặt đồ uống và thanh toán không tiền mặt, được xây dựng cho bài tập lớn môn Công nghệ Phần mềm. Sản phẩm hướng tới luồng đặt món nhanh tại quầy: xem menu, chọn size/topping, quản lý giỏ hàng, đăng nhập, tạo đơn, thanh toán và theo dõi trạng thái.
 
-> Trạng thái hiện tại: đã hoàn thành tài liệu kiến trúc và cây thư mục; chưa scaffold mã nguồn Next.js/NestJS nên dự án chưa thể chạy.
+> Trạng thái hiện tại: đã hoàn thành tài liệu kiến trúc, cây thư mục, `.gitignore` và `.env.example`; chưa scaffold mã nguồn Next.js/NestJS nên dự án chưa thể chạy.
 
 ## Công nghệ dự kiến
 
@@ -13,7 +13,7 @@ BrewLite là ứng dụng web đặt đồ uống và thanh toán không tiền 
 | Backend | NestJS, TypeScript, REST API |
 | Database | PostgreSQL |
 | ORM | Prisma |
-| Xác thực | JWT, Passport, Argon2id/bcrypt |
+| Xác thực | JWT, Passport, bcrypt |
 | Validation | `class-validator` |
 | Thanh toán | Mock Payment Gateway |
 | DevOps | Docker Compose |
@@ -53,9 +53,9 @@ BrewLite/
 │     ├─ prisma/
 │     │  └─ migrations/
 │     ├─ src/
-│     │  ├─ common/                # Guard, filter, interceptor, pipe
+│     │  ├─ common/                # Guard, filter, interceptor, pipe, error
 │     │  ├─ config/
-│     │  ├─ database/
+│     │  ├─ database/              # PrismaModule/PrismaService, transaction utility
 │     │  └─ modules/
 │     │     └─ <module>/
 │     │        ├─ controllers/
@@ -64,6 +64,8 @@ BrewLite/
 │     │        ├─ mappers/
 │     │        ├─ dto/
 │     │        └─ entities/
+│     │
+│     │     # Riêng payments có gateways/, inventory có jobs/ khi triển khai
 │     └─ test/
 ├─ packages/
 │  ├─ contracts/                   # Contract/type dùng chung
@@ -124,6 +126,8 @@ Mọi chuyển trạng thái phải đi qua `OrderService` và được ghi vào
 - [Thiết kế bảo mật](./docs/architecture/security.md)
 - [Các quyết định kiến trúc](./docs/decisions/ADR-001-project-architecture.md)
 - [Product Backlog](./docs/scrum/product-backlog.md)
+- [Kế hoạch 3 Sprint](./docs/scrum/sprint-01.md)
+- [Chiến lược kiểm thử](./docs/testing/test-strategy.md)
 
 ## Khởi chạy dự án
 
@@ -134,7 +138,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Các lệnh chính thức phải được cập nhật tại đây ngay khi `package.json`, `.env.example`, Dockerfile và `docker-compose.yml` được tạo. Không xem các lệnh trên là đã khả dụng ở trạng thái hiện tại.
+Các lệnh chính thức phải được cập nhật tại đây ngay khi `package.json`, Dockerfile và `docker-compose.yml` được tạo. Không xem các lệnh trên là đã khả dụng ở trạng thái hiện tại.
 
 ## Quy ước phát triển
 

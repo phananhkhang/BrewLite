@@ -156,7 +156,7 @@ sequenceDiagram
 
 1. Xác thực user và kiểm tra giỏ không rỗng.
 2. Đọc variant/topping đang hoạt động và tính giá server-side.
-3. Kiểm tra coupon, tính `subtotal`, `discountAmount`, `total`.
+3. Kiểm tra coupon, tính `subtotal`, `discountAmount`, `total`; nếu dùng coupon thì giữ lượt bằng `CouponRedemption(RESERVED)`.
 4. Với từng variant, cập nhật tồn kho khi `stock >= quantity` và `version` đúng; nếu mất race thì retry transaction tối đa số lần cấu hình.
 5. Tạo `Order`, `OrderItem`, `OrderItemTopping`, `InventoryReservation` và `OrderStatusHistory`.
 6. Commit rồi trả order `PENDING`.
@@ -173,8 +173,8 @@ Không giữ transaction trong khi gọi payment gateway. Nếu gateway chậm, 
 4. Nếu chưa tồn tại, tạo payment `PROCESSING` với unique key. Race do hai request đồng thời được unique constraint chặn; request thua đọc lại bản ghi đã thắng.
 5. Gọi mock gateway ngoài transaction.
 6. Trong transaction mới, khóa/kiểm tra order, cập nhật payment và transition order đúng một lần.
-7. Khi thành công: `PENDING -> PAID`, consume reservation, ghi lịch sử và cộng loyalty với unique `(order_id, type)`.
-8. Khi thất bại: chuyển `PAYMENT_FAILED`; reservation được giữ trong thời gian retry hoặc hoàn theo chính sách hết hạn.
+7. Khi thành công: `PENDING -> PAID`, consume inventory reservation, chuyển coupon redemption `RESERVED -> CONSUMED` (nếu có), ghi lịch sử và cộng loyalty với unique `(order_id, type)`.
+8. Khi thất bại: chuyển `PAYMENT_FAILED`; inventory/coupon reservation được giữ trong thời gian retry và được release/expire nếu order hủy hoặc quá hạn.
 
 ## 7. Nhất quán và lỗi
 

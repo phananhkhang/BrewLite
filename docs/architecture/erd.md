@@ -5,6 +5,7 @@
 ```mermaid
 erDiagram
     USER ||--o{ ORDER : dat
+    USER o|--o{ ORDER_STATUS_HISTORY : thay_doi
     USER ||--o{ LOYALTY_TRANSACTION : co
 
     PRODUCT ||--|{ PRODUCT_VARIANT : co
@@ -170,7 +171,12 @@ erDiagram
         uuid user_id FK
         uuid order_id FK,UK
         bigint discount_amount
+        enum status
+        timestamptz expires_at
+        timestamptz consumed_at
+        timestamptz released_at
         timestamptz created_at
+        timestamptz updated_at
     }
 
     LOYALTY_TRANSACTION {
@@ -196,6 +202,7 @@ erDiagram
 | OrderItem 1 - N OrderItemTopping | Topping là tùy chọn |
 | Order 1 - N Payment | Một đơn có thể thất bại rồi thử thanh toán lại |
 | Order 1 - N OrderStatusHistory | Mọi lần đổi trạng thái đều phải có audit record |
+| User 0..1 - N OrderStatusHistory | Người thao tác có thể được ghi nhận; null nếu transition do hệ thống/payment |
 | Order 1 - N InventoryReservation | Một reservation cho mỗi variant trong đơn |
 | Order 0..1 - 1 CouponRedemption | Mỗi đơn dùng tối đa một coupon |
 | User/Order 1 - N LoyaltyTransaction | Ledger bảo toàn lịch sử cộng/trừ điểm |
@@ -208,7 +215,7 @@ Năm entity trong đề bài đủ để demo luồng đơn giản nhưng chưa 
 - `OrderItemTopping` lưu nhiều topping và snapshot giá tại thời điểm mua.
 - `OrderStatusHistory` chứng minh transition và hỗ trợ audit.
 - `InventoryReservation` cho biết lượng tồn đang giữ/đã tiêu thụ/đã hoàn.
-- `CouponRedemption` kiểm soát giới hạn sử dụng coupon trong transaction.
+- `CouponRedemption` giữ lượt coupon khi order còn chờ thanh toán và chỉ chuyển `CONSUMED` sau khi trả tiền thành công; hủy/hết hạn sẽ giải phóng lượt.
 - `LoyaltyTransaction` giúp cộng điểm đúng một lần và truy vết được.
 - Nhiều `Payment` cho một order biểu diễn đúng các lần thử thanh toán.
 
@@ -222,6 +229,7 @@ Năm entity trong đề bài đủ để demo luồng đơn giản nhưng chưa 
 - Unique `(product_id, topping_id)` trên `product_topping`.
 - Unique `(order_id, product_variant_id)` trên `inventory_reservation`.
 - Unique `(order_id, type)` cho loyalty type `EARN` để chống cộng điểm lặp.
+- `coupon_redemption.status` chỉ cho `RESERVED | CONSUMED | RELEASED | EXPIRED`; `order_id` unique.
 - Partial unique index chỉ cho một payment `SUCCEEDED` trên mỗi order.
 - Check `stock >= 0`, `quantity > 0`, mọi giá trị tiền `>= 0`.
 - Check `subtotal - discount_amount = total` và `currency = 'VND'` trong MVP.

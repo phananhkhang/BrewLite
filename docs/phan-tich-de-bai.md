@@ -10,7 +10,7 @@ Công nghệ bắt buộc từ đề bài:
 - Backend: NestJS, TypeScript, REST API.
 - Cơ sở dữ liệu quan hệ: chọn PostgreSQL.
 - ORM: tài liệu này chọn Prisma.
-- Xác thực: JWT và mật khẩu băm bằng bcrypt/Argon2.
+- Xác thực: JWT và mật khẩu băm bằng bcrypt.
 - Thanh toán: cổng giả lập theo giao diện Ví/Thẻ.
 - Vận hành local: Docker Compose cho frontend, backend và PostgreSQL.
 
@@ -68,7 +68,7 @@ Các mục ngoài phạm vi có thể bổ sung sau mà không đổi cấu trú
 | Mã | Mục tiêu có thể kiểm thử | Cách đáp ứng |
 |---|---|---|
 | NFR-01 | API đọc/ghi thông thường p95 < 500 ms với dữ liệu mẫu | Index đúng, phân trang, tránh N+1, đo bằng integration/load test |
-| NFR-02 | Không lưu mật khẩu rõ | Băm bằng Argon2id hoặc bcrypt cost phù hợp |
+| NFR-02 | Không lưu mật khẩu rõ | Băm bằng bcrypt với cost phù hợp và được đo trên môi trường chạy |
 | NFR-03 | Dữ liệu đầu vào được kiểm tra | DTO + `class-validator`, whitelist và transform |
 | NFR-04 | Không bán quá tồn kho khi có request đồng thời | Transaction + optimistic locking + retry giới hạn |
 | NFR-05 | Retry thanh toán không tạo giao dịch kép | Unique `idempotency_key` và trả lại kết quả đã lưu |

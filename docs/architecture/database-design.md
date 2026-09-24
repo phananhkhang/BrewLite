@@ -88,7 +88,8 @@ Không dùng cascade từ User/Product vào dữ liệu lịch sử vì sẽ ph�
 | `payments(order_id, created_at DESC)` | Lịch sử attempt theo order |
 | `order_status_histories(order_id, created_at)` | Timeline trạng thái |
 | `inventory_reservations(status, expires_at)` | Job giải phóng reservation hết hạn |
-| `coupon_redemptions(coupon_id, user_id)` | Kiểm tra giới hạn coupon/user |
+| `coupon_redemptions(coupon_id, user_id, status)` | Kiểm tra giới hạn coupon/user chỉ trên `RESERVED`/`CONSUMED` |
+| `coupon_redemptions(status, expires_at)` | Giải phóng lượt coupon của order hết hạn |
 | `loyalty_transactions(user_id, created_at DESC)` | Lịch sử điểm |
 
 Không tạo index dư thừa trên cột ít phân biệt như boolean đơn lẻ. Dùng `EXPLAIN ANALYZE` để xác nhận trước khi bổ sung.
@@ -101,7 +102,7 @@ Transaction cần ngắn và không gọi HTTP bên ngoài:
 BEGIN
   đọc product/variant/topping active
   tính snapshot giá, subtotal, coupon, total
-  kiểm tra/ghi coupon_redemption nếu có
+  kiểm tra giới hạn coupon và INSERT coupon_redemption(status=RESERVED) nếu có
   với từng variant:
     UPDATE product_variants
       SET stock = stock - qty, version = version + 1
@@ -135,6 +136,8 @@ Hai update nằm trong cùng transaction. Nếu reservation đã `RELEASED`, `EX
 
 Job định kỳ tìm `ACTIVE AND expires_at < now()`, khóa bằng `FOR UPDATE SKIP LOCKED` (hoặc claim theo batch) rồi chuyển `EXPIRED` và hoàn tồn. Trong MVP có thể chạy cron của NestJS; nhiều instance vẫn an toàn nhờ điều kiện trạng thái.
 
+Cùng transaction hủy/hết hạn order, nếu có `coupon_redemption` đang `RESERVED` thì chuyển sang `RELEASED` hoặc `EXPIRED`. Việc đổi trạng thái phải có điều kiện `WHERE status = RESERVED` để retry không giải phóng hai lần.
+
 ## 7. Transaction hoàn tất thanh toán
 
 Không giữ transaction khi gọi mock gateway. Sau khi nhận kết quả:
@@ -147,12 +150,14 @@ BEGIN
     payment -> SUCCEEDED
     order PENDING -> PAID
     reservation ACTIVE -> CONSUMED
+    coupon_redemption RESERVED -> CONSUMED (nếu có)
     ghi status history
     ghi loyalty EARN nếu chưa tồn tại
     cập nhật users.loyalty_balance
   nếu thất bại:
     payment -> FAILED
     order PENDING -> PAYMENT_FAILED
+    giữ coupon_redemption ở RESERVED trong thời hạn retry
     ghi status history
 COMMIT
 ```

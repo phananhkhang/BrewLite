@@ -1,0 +1,51 @@
+# Chiến lược kiểm thử BrewLite
+
+## 1. Mục tiêu
+
+Kiểm thử tập trung vào Acceptance Criteria của 10 task và các rủi ro nghiệp vụ của Task 10. Test không chỉ chứng minh endpoint trả 2xx mà phải chứng minh state, transaction và dữ liệu sau xử lý là đúng.
+
+## 2. Bố trí test
+
+```text
+apps/api/src/**/**.spec.ts        # unit test đặt gần code
+apps/api/test/integration/       # Prisma/repository/transaction
+apps/api/test/fixtures/          # factory/fixture dùng cho backend test
+apps/web/tests/                  # component/integration frontend
+tests/e2e/                       # luồng end-to-end toàn hệ thống
+```
+
+## 3. Ma trận kiểm thử tối thiểu
+
+| ID | Phạm vi | Test chính | Kết quả mong đợi |
+|---|---|---|---|
+| TC-01 | Catalog | `GET /products`, detail, size/topping active | Response đúng contract; loading/empty/error được xử lý ở UI |
+| TC-02 | Auth | register/login, email trùng, password sai | bcrypt hash; JWT hợp lệ; lỗi không lộ passwordHash |
+| TC-03 | Order | tạo order từ cart hợp lệ | Backend tính lại giá, tạo `PENDING`, item snapshot và reservation |
+| TC-04 | State Machine | thử transition không có trong sơ đồ | Bị chặn với `ORDER_INVALID_TRANSITION`; state DB không đổi |
+| TC-05 | Payment Idempotency | gửi đồng thời/lặp cùng Idempotency-Key | Chỉ một payment attempt theo key; không gọi gateway/làm side effect lần hai |
+| TC-06 | Payment Retry | payment fail rồi retry bằng key mới | Có `PAYMENT_FAILED -> PENDING`; attempt mới độc lập; order chỉ có tối đa một payment `SUCCEEDED` |
+| TC-07 | Concurrent Stock | nhiều request mua cùng variant | Không có stock âm; request vượt tồn trả `OUT_OF_STOCK`/`INVENTORY_CONFLICT` |
+| TC-08 | Coupon | dùng coupon, fail/cancel/expire | `RESERVED` không bị tính vĩnh viễn; success -> `CONSUMED`; cancel/expire -> release |
+| TC-09 | Loyalty | order thanh toán thành công và request lặp | Mỗi order chỉ cộng `EARN` một lần |
+| TC-10 | E2E | menu -> cart -> login -> order -> payment -> history | Luồng MVP hoàn thành và lịch sử chứa đúng order |
+
+## 4. Ba test bắt buộc của Task 10
+
+### 4.1 Invalid transition
+
+Ví dụ order `PENDING` gọi thẳng `READY`. Assert HTTP `409`, error code đúng và không xuất hiện status history giả.
+
+### 4.2 Idempotency concurrent
+
+Gửi hai request cùng `Idempotency-Key` và cùng payload gần như đồng thời. Assert cùng kết quả nghiệp vụ, một record payment theo key và side effect chỉ xảy ra một lần.
+
+### 4.3 Concurrent inventory
+
+Tạo stock nhỏ hơn tổng quantity của nhiều request đồng thời. Assert tổng quantity được chấp nhận không vượt stock ban đầu và stock cuối `>= 0`.
+
+## 5. Definition of Done liên quan test
+
+- Business rule mới/sửa có unit test.
+- Transaction/repository quan trọng có integration test.
+- Luồng acceptance được kiểm tra thủ công hoặc e2e.
+- Test phải độc lập, seed/fixture xác định được và không phụ thuộc thứ tự chạy.
