@@ -66,7 +66,7 @@ Không dùng chung trực tiếp Prisma model cho frontend. `packages/contracts`
 | `users` | Hồ sơ, vai trò, số dư điểm đọc tối ưu | Tự tính điểm thưởng |
 | `catalog` | Product, variant, topping, giá niêm yết | Tin giá do client gửi |
 | `orders` | Tạo đơn, snapshot giá, state machine, lịch sử | Gọi repository của payment trực tiếp |
-| `inventory` | Giữ/trừ/hoàn tồn kho, optimistic locking | Quyết định trạng thái thanh toán |
+| `inventory` | Giữ/trừ/hoàn tồn kho bằng cập nhật có điều kiện | Quyết định trạng thái thanh toán |
 | `payments` | Idempotency, payment attempt, gateway adapter | Sửa order không qua `OrderService` |
 | `promotions` | Kiểm tra coupon, tính discount, redemption | Sửa bảng loyalty |
 | `loyalty` | Ledger điểm, cộng/trừ điểm idempotent | Tính giá sản phẩm |
@@ -91,7 +91,7 @@ Trách nhiệm từng lớp:
 |---|---|---|
 | Controller | Route, auth/guard, đọc params/body, gọi service, map HTTP response | Business rule, Prisma query, transaction |
 | Service | Điều phối nghiệp vụ, state machine, tính giá, transaction, gọi service module khác | Chi tiết HTTP hoặc serialize response thủ công |
-| Repository | Đọc/ghi PostgreSQL qua Prisma, optimistic update; gọi Mapper khi cần chuyển record | Quyết định nghiệp vụ hoặc trả HTTP exception |
+| Repository | Đọc/ghi PostgreSQL qua Prisma, cập nhật tồn có điều kiện; gọi Mapper khi cần chuyển record | Quyết định nghiệp vụ hoặc trả HTTP exception |
 | Mapper | Chuyển Prisma record sang Entity và Entity sang Response DTO | Truy vấn database, transaction hoặc business rule |
 | DTO | Validate và mô tả contract request/response | Truy cập database |
 | Entity/Enum | Cấu trúc và trạng thái nghiệp vụ dùng trong module | NestJS controller hoặc Prisma client |
@@ -157,7 +157,7 @@ sequenceDiagram
 1. Xác thực user và kiểm tra giỏ không rỗng.
 2. Đọc variant/topping đang hoạt động và tính giá server-side.
 3. Kiểm tra coupon, tính `subtotal`, `discountAmount`, `total`; nếu dùng coupon thì giữ lượt bằng `CouponRedemption(RESERVED)`.
-4. Với từng variant, cập nhật tồn kho khi `stock >= quantity` và `version` đúng; nếu mất race thì retry transaction tối đa số lần cấu hình.
+4. Với từng variant, trừ tồn bằng cập nhật nguyên tử với điều kiện `stock >= quantity`; nếu không cập nhật được dòng nào thì báo hết hàng/xung đột tồn kho.
 5. Tạo `Order`, `OrderItem`, `OrderItemTopping`, `InventoryReservation` và `OrderStatusHistory`.
 6. Commit rồi trả order `PENDING`.
 
@@ -180,7 +180,7 @@ Không giữ transaction trong khi gọi payment gateway. Nếu gateway chậm, 
 
 - Các thay đổi bắt buộc đồng bộ trong cùng PostgreSQL được gói trong transaction.
 - Tác vụ có thể lặp lại đều có khóa idempotency hoặc unique business key.
-- Optimistic locking dùng cột `version`; conflict trả `409` sau khi hết retry.
+- Cập nhật tồn dùng điều kiện `WHERE stock >= quantity`; chỉ transaction trừ tồn thành công mới tạo reservation.
 - HTTP status chỉ là lớp vận chuyển; response luôn có `error.code`, `message`, `details`, `requestId`.
 - Không trả stack trace/Prisma error cho client.
 - Với MVP, xử lý nội bộ chạy đồng bộ trong Service. Nếu tích hợp dịch vụ thật, bổ sung transactional outbox thay vì phát message trước khi commit.

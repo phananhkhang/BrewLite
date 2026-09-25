@@ -19,7 +19,7 @@ tests/e2e/                       # luồng end-to-end toàn hệ thống
 | ID | Phạm vi | Test chính | Kết quả mong đợi |
 |---|---|---|---|
 | TC-01 | Catalog | `GET /products`, detail, size/topping active | Response đúng contract; loading/empty/error được xử lý ở UI |
-| TC-02 | Auth | register/login, email trùng, password sai | bcrypt hash; JWT hợp lệ; lỗi không lộ passwordHash |
+| TC-02 | Auth | register/login, username trùng, password sai | bcrypt hash; JWT hợp lệ; lỗi không lộ passwordHash |
 | TC-03 | Order | tạo order từ cart hợp lệ | Backend tính lại giá, tạo `PENDING`, item snapshot và reservation |
 | TC-04 | State Machine | thử transition không có trong sơ đồ | Bị chặn với `ORDER_INVALID_TRANSITION`; state DB không đổi |
 | TC-05 | Payment Idempotency | gửi đồng thời/lặp cùng Idempotency-Key | Chỉ một payment attempt theo key; không gọi gateway/làm side effect lần hai |

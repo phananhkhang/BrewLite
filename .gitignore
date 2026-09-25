@@ -30,6 +30,7 @@ Thumbs.db
 # Prisma/local data
 *.db
 *.db-journal
+apps/api/src/generated/prisma/
 
 # Test artifacts
 playwright-report/

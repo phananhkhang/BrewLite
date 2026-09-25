@@ -15,7 +15,7 @@
 - Claim tối thiểu: `sub`, `role`, `iat`, `exp`, `iss`, `aud`, `jti`.
 - Xác minh đầy đủ signature, issuer, audience và expiration; không chấp nhận thuật toán từ header một cách tùy ý.
 - Nếu có refresh token: lưu trong cookie `HttpOnly`, `Secure`, `SameSite=Lax/Strict`; lưu hash refresh token ở server, rotate sau mỗi lần dùng và thu hồi cả token family khi phát hiện reuse.
-- Thông báo login sai dùng chung `INVALID_CREDENTIALS` để không lộ email tồn tại.
+- Thông báo login sai dùng chung `INVALID_CREDENTIALS` để không lộ username tồn tại.
 
 ## 3. Phân quyền
 
@@ -66,7 +66,7 @@ CORS dùng allowlist chính xác theo origin môi trường, không dùng `*` kh
 
 | Endpoint | Gợi ý giới hạn ban đầu |
 |---|---|
-| Register/Login | 5 lần/phút/IP và giới hạn theo email đã hash |
+| Register/Login | 5 lần/phút/IP và giới hạn theo username đã hash |
 | Refresh token | 10 lần/phút/session |
 | Create order | 20 lần/phút/user |
 | Payment | 10 lần/phút/user, idempotency vẫn bắt buộc |
@@ -94,13 +94,13 @@ Không khóa tài khoản vĩnh viễn chỉ vì nhiều login sai; dùng backof
 
 - TLS cho mọi lưu lượng ngoài local.
 - Backup database được mã hóa và kiểm thử khôi phục.
-- Chỉ thu thập email và dữ liệu cần thiết; chưa cần tên/địa chỉ cho pickup tại quầy.
+- Chỉ thu thập username và dữ liệu cần thiết; chưa cần tên/địa chỉ cho pickup tại quầy.
 - Không cascade delete order/payment. Khi đáp ứng yêu cầu xóa tài khoản, ẩn danh hóa thông tin định danh và giữ ledger giao dịch theo chính sách.
 - Không trả `passwordHash`, `requestHash`, internal failure detail hoặc metadata gateway qua API.
 
 ## 11. Checklist kiểm thử bảo mật
 
-- Login sai không tiết lộ email tồn tại.
+- Login sai không tiết lộ username tồn tại.
 - JWT hết hạn/sai issuer/sai audience bị từ chối.
 - Customer không đọc/cập nhật order của user khác.
 - Customer không gọi endpoint barista/admin.

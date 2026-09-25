@@ -44,7 +44,7 @@ Public. Tạo tài khoản customer.
 
 ```json
 {
-  "email": "customer@example.com",
+  "username": "customer01",
   "password": "MatKhauManh123!"
 }
 ```
@@ -56,7 +56,7 @@ Kết quả `201 Created`:
   "data": {
     "user": {
       "id": "uuid",
-      "email": "customer@example.com",
+      "username": "customer01",
       "role": "CUSTOMER",
       "loyaltyBalance": 0
     },
@@ -66,20 +66,20 @@ Kết quả `201 Created`:
 }
 ```
 
-Lỗi chính: `400 VALIDATION_ERROR`, `409 EMAIL_ALREADY_EXISTS`, `429 RATE_LIMITED`.
+Lỗi chính: `400 VALIDATION_ERROR`, `409 USERNAME_ALREADY_EXISTS`, `429 RATE_LIMITED`.
 
 ### `POST /auth/login`
 
-Public. Xác thực email/password.
+Public. Xác thực username/password.
 
 ```json
 {
-  "email": "customer@example.com",
+  "username": "customer01",
   "password": "MatKhauManh123!"
 }
 ```
 
-Kết quả `200 OK` giống phần auth của register. Sai thông tin luôn trả `401 INVALID_CREDENTIALS`, không tiết lộ email có tồn tại hay không.
+Kết quả `200 OK` giống phần auth của register. Sai thông tin luôn trả `401 INVALID_CREDENTIALS`, không tiết lộ username có tồn tại hay không.
 
 ### `POST /auth/refresh` (khuyến nghị)
 
@@ -108,7 +108,6 @@ Kết quả `200 OK`:
       "id": "uuid",
       "sku": "CAPPUCCINO",
       "name": "Cappuccino",
-      "basePrice": 45000,
       "imageUrl": "https://...",
       "minPrice": 45000,
       "available": true
@@ -132,7 +131,6 @@ Public. Trả chi tiết và chỉ các tùy chọn đang hoạt động.
     "sku": "CAPPUCCINO",
     "name": "Cappuccino",
     "description": "...",
-    "basePrice": 45000,
     "imageUrl": "https://...",
     "variants": [
       { "id": "uuid", "size": "M", "price": 50000, "available": true }
@@ -145,6 +143,8 @@ Public. Trả chi tiết và chỉ các tùy chọn đang hoạt động.
 ```
 
 Lỗi: `404 PRODUCT_NOT_FOUND`.
+
+`minPrice` được suy ra từ giá các variant đang hoạt động; bảng `products` không có cột giá cơ sở.
 
 ## 4. Order
 
@@ -205,6 +205,8 @@ Kết quả `201 Created`:
 ```
 
 Lỗi chính: `401 UNAUTHORIZED`, `400 INVALID_OPTION`, `409 OUT_OF_STOCK`, `409 INVENTORY_CONFLICT`, `422 COUPON_NOT_APPLICABLE`.
+
+`lineTotal` và `currency` trong response là giá trị tính ở lớp API (`currency` cố định là `VND` trong MVP), không phải cột của các bảng `orders` hay `order_items`.
 
 ### `GET /orders/me`
 
@@ -311,7 +313,7 @@ Yêu cầu đăng nhập. Trả `balance` và lịch sử giao dịch phân tran
 | 403 | `FORBIDDEN` | Đã đăng nhập nhưng thiếu role |
 | 404 | `PRODUCT_NOT_FOUND`, `ORDER_NOT_FOUND` | Tài nguyên không tồn tại/không thuộc user |
 | 409 | `OUT_OF_STOCK` | Không đủ tồn |
-| 409 | `INVENTORY_CONFLICT` | Hết retry optimistic lock |
+| 409 | `INVENTORY_CONFLICT` | Transaction tồn kho bị serialization/deadlock sau khi hết retry |
 | 409 | `ORDER_INVALID_TRANSITION` | Chuyển trạng thái sai |
 | 409 | `ORDER_ALREADY_PAID` | Thanh toán đơn đã trả |
 | 409 | `IDEMPOTENCY_KEY_REUSED` | Key cũ khác payload |

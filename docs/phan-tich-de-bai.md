@@ -70,7 +70,7 @@ Các mục ngoài phạm vi có thể bổ sung sau mà không đổi cấu trú
 | NFR-01 | API đọc/ghi thông thường p95 < 500 ms với dữ liệu mẫu | Index đúng, phân trang, tránh N+1, đo bằng integration/load test |
 | NFR-02 | Không lưu mật khẩu rõ | Băm bằng bcrypt với cost phù hợp và được đo trên môi trường chạy |
 | NFR-03 | Dữ liệu đầu vào được kiểm tra | DTO + `class-validator`, whitelist và transform |
-| NFR-04 | Không bán quá tồn kho khi có request đồng thời | Transaction + optimistic locking + retry giới hạn |
+| NFR-04 | Không bán quá tồn kho khi có request đồng thời | Transaction + cập nhật nguyên tử `WHERE stock >= quantity`; chỉ retry lỗi serialization/deadlock |
 | NFR-05 | Retry thanh toán không tạo giao dịch kép | Unique `idempotency_key` và trả lại kết quả đã lưu |
 | NFR-06 | Chạy nhất quán trên máy thành viên | Docker Compose, migration và seed có version |
 | NFR-07 | Quan sát được lỗi | Correlation ID, log có cấu trúc, không log bí mật |

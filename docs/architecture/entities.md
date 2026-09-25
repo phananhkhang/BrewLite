@@ -29,14 +29,14 @@ LoyaltyTransactionType = EARN | REDEEM | ADJUSTMENT | REVERSAL
 | Thuộc tính | Kiểu | Bắt buộc | Quy tắc |
 |---|---|---:|---|
 | `id` | uuid | Có | PK |
-| `email` | citext | Có | Unique, normalize lowercase/trim |
+| `username` | varchar(100) | Có | Unique |
 | `passwordHash` | string | Có | Không bao giờ trả ra API |
 | `role` | UserRole | Có | Mặc định `CUSTOMER` |
 | `loyaltyBalance` | int | Có | Cache số dư, `>= 0`; nguồn sự thật là ledger |
 | `isActive` | boolean | Có | Mặc định `true` |
 | `createdAt`, `updatedAt` | timestamp | Có | Audit |
 
-Invariant: email hợp lệ; password chỉ tồn tại ở dạng hash; user bị khóa không được đăng nhập/tạo đơn mới.
+Invariant: username là định danh đăng nhập duy nhất; password chỉ tồn tại ở dạng hash; user bị khóa không được đăng nhập/tạo đơn mới.
 
 ## 4. Nhóm catalog
 
@@ -48,7 +48,6 @@ Invariant: email hợp lệ; password chỉ tồn tại ở dạng hash; user b�
 | `sku` | varchar(50) | Unique, ổn định |
 | `name` | varchar(150) | Không rỗng |
 | `description` | text | Nullable |
-| `basePrice` | money | `>= 0` |
 | `imageUrl` | varchar(500) | URL HTTPS hoặc đường dẫn asset hợp lệ |
 | `isActive` | boolean | Ẩn mềm khỏi menu |
 | `createdAt`, `updatedAt` | timestamp | Audit |
@@ -60,12 +59,11 @@ Invariant: email hợp lệ; password chỉ tồn tại ở dạng hash; user b�
 | `id` | uuid | PK |
 | `productId` | uuid | FK Product |
 | `size` | ProductSize | Unique cùng product |
-| `priceDelta` | money | Có thể bằng 0; giá bán = basePrice + priceDelta |
+| `price` | money | Giá bán của variant, `>= 0` |
 | `stock` | int | `>= 0` |
-| `version` | int | Tăng sau mỗi thay đổi stock, dùng optimistic locking |
 | `isActive` | boolean | Không cho thêm vào đơn mới nếu false |
 
-Invariant: `basePrice + priceDelta >= 0`; stock không âm; variant inactive vẫn được giữ để lịch sử order tham chiếu.
+Invariant: giá và stock không âm; variant inactive vẫn được giữ để lịch sử order tham chiếu.
 
 ### Topping
 
@@ -96,7 +94,6 @@ Order là aggregate root quản lý item, tổng tiền, trạng thái và trans
 | `subtotal` | money | Tổng item trước giảm giá |
 | `discountAmount` | money | `0..subtotal` |
 | `total` | money | `subtotal - discountAmount` |
-| `currency` | char(3) | `VND` trong MVP |
 | `couponCodeSnapshot` | varchar(50) | Nullable |
 | `reservationExpiresAt` | timestamp | Thời điểm tự hoàn tồn nếu chưa trả tiền |
 | `createdAt`, `updatedAt` | timestamp | Audit |
@@ -114,7 +111,8 @@ Không lưu `loyaltyPointsEarned` như nguồn sự thật trên order; số đi
 | `variantNameSnapshot` | varchar(50) | Ví dụ `M` |
 | `unitPrice` | money | Giá variant trước topping |
 | `quantity` | int | `> 0`, giới hạn ở DTO |
-| `lineTotal` | money | `(unitPrice + tổng topping đơn vị) * quantity` |
+
+Tổng một dòng được tính từ `unitPrice`, topping và `quantity`; ERD hiện tại không lưu `lineTotal` thành cột riêng.
 
 ### OrderItemTopping
 
@@ -126,7 +124,8 @@ Không lưu `loyaltyPointsEarned` như nguồn sự thật trên order; số đi
 | `toppingNameSnapshot` | varchar(100) | Tên lúc đặt |
 | `unitPrice` | money | Giá lúc đặt |
 | `quantity` | int | Số topping trên một đơn vị món, `> 0` |
-| `lineTotal` | money | `unitPrice * quantity * orderItem.quantity` |
+
+Tổng topping được tính từ `unitPrice`, `quantity` và số lượng món; ERD hiện tại không lưu `lineTotal` thành cột riêng.
 
 ### OrderStatusHistory
 

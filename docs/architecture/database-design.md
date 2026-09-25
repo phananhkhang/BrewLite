@@ -28,7 +28,7 @@ ERD đầy đủ nằm tại [erd.md](./erd.md), đặc tả trường tại [en
 
 ### Unique
 
-- `users(lower(email))` hoặc dùng extension `citext` và unique `email`.
+- `users.username`.
 - `products.sku`, `toppings.code`, `coupons.code`, `orders.order_number`.
 - `product_variants(product_id, size)`.
 - `product_toppings(product_id, topping_id)`.
@@ -53,17 +53,15 @@ WHERE order_id IS NOT NULL AND type = 'EARN';
 
 ```sql
 CHECK (stock >= 0)
-CHECK (version >= 0)
 CHECK (quantity > 0)
-CHECK (base_price >= 0)
+CHECK (price >= 0)
 CHECK (subtotal >= 0 AND discount_amount >= 0 AND total >= 0)
 CHECK (discount_amount <= subtotal)
 CHECK (total = subtotal - discount_amount)
-CHECK (currency = 'VND')
 CHECK (starts_at < ends_at)
 ```
 
-PostgreSQL không cho check constraint tham chiếu bảng khác, nên điều kiện `product.base_price + variant.price_delta >= 0` và tổng order item được kiểm tra ở Service, sau đó bảo vệ thêm bằng test.
+Tổng từng dòng order được tính ở Service từ snapshot giá và quantity; ERD không lưu `line_total` nên không có check constraint cho cột này.
 
 ### Foreign key và hành vi xóa
 
@@ -105,8 +103,8 @@ BEGIN
   kiểm tra giới hạn coupon và INSERT coupon_redemption(status=RESERVED) nếu có
   với từng variant:
     UPDATE product_variants
-      SET stock = stock - qty, version = version + 1
-      WHERE id = :id AND version = :expectedVersion AND stock >= :qty
+      SET stock = stock - qty
+      WHERE id = :id AND stock >= :qty
     nếu row_count = 0: conflict/hết hàng
   INSERT order + items + item_toppings
   INSERT inventory_reservations(status=ACTIVE)
@@ -114,7 +112,7 @@ BEGIN
 COMMIT
 ```
 
-Nếu optimistic conflict, Service retry toàn transaction tối đa 2-3 lần với jitter nhỏ. Hết retry trả `409 INVENTORY_CONFLICT`; hết hàng trả `409 OUT_OF_STOCK` kèm variant bị thiếu.
+Nếu câu lệnh trừ tồn không cập nhật được dòng nào, Service trả `409 OUT_OF_STOCK` kèm variant bị thiếu. Chỉ retry transaction khi PostgreSQL trả lỗi serialization/deadlock có thể retry an toàn.
 
 Thứ tự lock/update variant luôn theo `product_variant_id` tăng dần để giảm deadlock khi nhiều đơn chứa cùng tập sản phẩm.
 
@@ -129,7 +127,7 @@ WHERE id = :id AND status = ACTIVE
 
 nếu row_count = 1:
   UPDATE product_variants
-  SET stock = stock + reservation.quantity, version = version + 1
+  SET stock = stock + reservation.quantity
 ```
 
 Hai update nằm trong cùng transaction. Nếu reservation đã `RELEASED`, `EXPIRED` hoặc `CONSUMED`, không cộng stock lần nữa.
@@ -181,7 +179,7 @@ PK vẫn là UUID. `order_number` chỉ dùng hiển thị, ví dụ `BL-2026092
 
 1. Mỗi thay đổi schema phải đi qua Prisma migration được commit.
 2. Không sửa migration đã chạy trên môi trường chung; tạo migration bù.
-3. Seed phải chạy lặp an toàn bằng upsert theo `sku`, `code`, `email`.
+3. Seed phải chạy lặp an toàn bằng upsert theo `username`, `sku`, `code`.
 4. Seed tối thiểu: user demo, 4 sản phẩm, đủ size S/M/L, topping, một coupon còn hạn.
 5. CI chạy database tạm, migrate từ rỗng, seed và integration test.
 6. Trước thay đổi phá vỡ, có backup/rollback plan; migration expand-contract khi cần tương thích nhiều phiên bản.

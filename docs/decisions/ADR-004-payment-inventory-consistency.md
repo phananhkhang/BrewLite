@@ -9,7 +9,7 @@ Task 10 yêu cầu thanh toán idempotent và không bán quá tồn khi nhiều
 
 ## Quyết định
 
-- Tạo order và giữ tồn trong một transaction ngắn bằng optimistic locking (`stock`, `version`).
+- Tạo order và giữ tồn trong một transaction ngắn bằng cập nhật nguyên tử có điều kiện `stock >= quantity`.
 - Lưu `InventoryReservation` để consume/release/expire đúng một lần.
 - Mỗi lần thử thanh toán là một `Payment`; `idempotency_key` unique và gắn `request_hash`.
 - Không giữ database transaction trong lúc gọi gateway.

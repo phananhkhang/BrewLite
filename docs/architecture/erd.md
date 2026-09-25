@@ -29,7 +29,7 @@ erDiagram
 
     USER {
         uuid id PK
-        citext email UK
+        string username UK
         string password_hash
         enum role
         int loyalty_balance
@@ -43,7 +43,6 @@ erDiagram
         string sku UK
         string name
         string description
-        bigint base_price
         string image_url
         boolean is_active
         timestamptz created_at
@@ -54,9 +53,8 @@ erDiagram
         uuid id PK
         uuid product_id FK
         enum size
-        bigint price_delta
+        bigint price
         int stock
-        int version
         boolean is_active
         timestamptz created_at
         timestamptz updated_at
@@ -85,7 +83,6 @@ erDiagram
         bigint subtotal
         bigint discount_amount
         bigint total
-        string currency
         string coupon_code_snapshot
         timestamptz reservation_expires_at
         timestamptz created_at
@@ -100,7 +97,6 @@ erDiagram
         string variant_name_snapshot
         bigint unit_price
         int quantity
-        bigint line_total
     }
 
     ORDER_ITEM_TOPPING {
@@ -110,7 +106,6 @@ erDiagram
         string topping_name_snapshot
         bigint unit_price
         int quantity
-        bigint line_total
     }
 
     PAYMENT {
@@ -232,7 +227,7 @@ Năm entity trong đề bài đủ để demo luồng đơn giản nhưng chưa 
 - `coupon_redemption.status` chỉ cho `RESERVED | CONSUMED | RELEASED | EXPIRED`; `order_id` unique.
 - Partial unique index chỉ cho một payment `SUCCEEDED` trên mỗi order.
 - Check `stock >= 0`, `quantity > 0`, mọi giá trị tiền `>= 0`.
-- Check `subtotal - discount_amount = total` và `currency = 'VND'` trong MVP.
+- Check `subtotal - discount_amount = total`.
 - `from_status` có thể null ở bản ghi lịch sử đầu tiên; `to_status` không null.
 
 Chi tiết cột, enum và vòng đời nằm trong [đặc tả entity](./entities.md) và [thiết kế cơ sở dữ liệu](./database-design.md).
