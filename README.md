@@ -38,42 +38,73 @@ Mapper là helper thuần, không phải một tầng riêng; mapper không truy
 ## Cây thư mục
 
 ```text
-BrewLite/
-├─ apps/
-│  ├─ web/                         # Ứng dụng Next.js
-│  │  ├─ public/
-│  │  ├─ src/
-│  │  │  ├─ app/                   # Route, layout, page
-│  │  │  ├─ components/            # UI dùng chung
-│  │  │  ├─ features/              # auth, cart, catalog, checkout, orders
-│  │  │  ├─ lib/                   # API client, auth, query client
-│  │  │  └─ stores/                # Zustand stores
-│  │  └─ tests/
-│  └─ api/                         # Ứng dụng NestJS
-│     ├─ prisma/
-│     │  └─ migrations/
-│     ├─ src/
-│     │  ├─ common/                # Guard, filter, interceptor, pipe, error
-│     │  ├─ config/
-│     │  ├─ database/              # PrismaModule/PrismaService, transaction utility
-│     │  └─ modules/
-│     │     └─ <module>/
-│     │        ├─ controllers/
-│     │        ├─ services/
-│     │        ├─ repositories/
-│     │        ├─ mappers/
-│     │        ├─ dto/
-│     │        └─ entities/
-│     │
-│     │     # Riêng payments có gateways/, inventory có jobs/ khi triển khai
-│     └─ test/
-├─ packages/
-│  ├─ contracts/                   # Contract/type dùng chung
-│  ├─ eslint-config/
-│  └─ tsconfig/
-├─ tests/e2e/
-├─ scripts/
-└─ docs/
+src/
+├── app.module.ts                           // Root module tích hợp Config, Prisma, Auth, User
+├── main.ts                                 // Entry point: Global Pipes, Filters, Interceptors, Swagger
+│
+├── config/                                 // [Backend Architect] Quản lý cấu hình & biến môi trường
+│   ├── env.validation.ts                   // Kiểm tra tính hợp lệ của .env (JWT_SECRET, DATABASE_URL)
+│   └── auth.config.ts                      // TTL tokens, bcrypt/argon rounds, cookie options
+│
+├── common/                                 // Tầng tài nguyên dùng chung xuyên suốt hệ thống
+│   ├── constants/
+│   │   ├── auth.constants.ts               // Metadata keys: IS_PUBLIC_KEY, PERMISSIONS_KEY, ROLES_KEY
+│   │   └── error-codes.constants.ts        // Mã lỗi nghiệp vụ chuẩn hóa (E_UNAUTHORIZED, E_USER_NOT_FOUND)
+│   │
+│   ├── decorators/                         // [Identity Engineer] Bộ Decorators custom
+│   │   ├── current-user.decorator.ts       // Trích xuất User Payload từ Request (sau khi qua Guard)
+│   │   ├── public.decorator.ts             // Đánh dấu Endpoint công khai (bypass JwtAuthGuard)
+│   │   ├── roles.decorator.ts              // Khai báo Role yêu cầu: @RequireRoles('ADMIN', 'MANAGER')
+│   │   └── permissions.decorator.ts        // Khai báo Permission yêu cầu: @RequirePermissions('pos:checkout')
+│   │
+│   ├── guards/                             // [Identity Engineer] Chuỗi kiểm soát truy cập
+│   │   ├── jwt-auth.guard.ts               // Kiểm tra Access Token (kiểm tra @Public() trước)
+│   │   ├── roles.guard.ts                  // Kiểm tra Role-Based Access Control cấp cao
+│   │   └── permissions.guard.ts            // Kiểm tra phân quyền chi tiết (Fine-grained RBAC)
+│   │
+│   ├── filters/                            // [API Platform] Chuẩn hóa lỗi trả về toàn hệ thống
+│   │   └── http-exception.filter.ts        // Format: { success: false, statusCode, errorCode, message, timestamp }
+│   │
+│   ├── interceptors/                       // [API Platform] Chuẩn hóa dữ liệu đầu ra
+│   │   └── transform-response.interceptor.ts // Format: { success: true, data: ..., meta: ... }
+│   │
+│   ├── pipes/                              // [API Platform]
+│   │   └── validation.pipe.ts              // Tự động strip field thừa, validate type qua class-validator
+│   │
+│   └── prisma/                             // [Database Optimizer] Tầng kết nối cơ sở dữ liệu
+│       ├── prisma.service.ts               // Quản lý Prisma Client, Connection Pool, Soft-delete middleware
+│       └── prisma.module.ts                // Module toàn cục (@Global)
+│
+└── modules/
+    ├── auth/                               // [Identity & Access Engineer] Module Xác thực & Cấp quyền
+    │   ├── dto/
+    │   │   ├── register.dto.ts             // DTO đăng ký tài khoản khách hàng / nội bộ
+    │   │   ├── login.dto.ts                // DTO đăng nhập (email + password)
+    │   │   ├── refresh-token.dto.ts        // DTO nhận refresh token để quay vòng
+    │   │   ├── forgot-password.dto.ts      // DTO yêu cầu gửi link reset mật khẩu
+    │   │   └── reset-password.dto.ts       // DTO đặt lại mật khẩu với Token một lần
+    │   ├── interfaces/
+    │   │   ├── token-payload.interface.ts  // Định dạng JWT Claims: { sub, email, roles, permissions }
+    │   │   └── auth-response.interface.ts  // Cấu trúc trả về: { user, accessToken, refreshToken }
+    │   ├── strategies/
+    │   │   ├── jwt.strategy.ts             // Passport Strategy phân giải Bearer Access Token
+    │   │   └── refresh-jwt.strategy.ts     // Passport Strategy kiểm tra Refresh Token
+    │   ├── auth.controller.ts              // Endpoints: /auth/login, /register, /refresh, /logout
+    │   ├── auth.service.ts                 // Logic băm Argon2id, ký JWT, Rotation & Reuse Detection
+    │   └── auth.module.ts
+    │
+    └── user/                               // [Backend Architect & Database Optimizer] Module Quản lý User
+        ├── dto/
+        │   ├── create-user.dto.ts          // DTO tạo User mới (dành cho Admin)
+        │   ├── update-user.dto.ts          // DTO cập nhật profile người dùng hiện tại
+        │   ├── update-user-roles.dto.ts    // DTO gán/hủy Role của User
+        │   └── query-user.dto.ts           // DTO lọc, tìm kiếm, phân trang người dùng
+        ├── entities/
+        │   └── user.entity.ts              // Class Transformer loại bỏ triệt để passwordHash
+        ├── user.repository.ts              // Lớp trừu tượng truy vấn Database (ngăn Service phụ thuộc cứng vào Prisma)
+        ├── user.controller.ts              // Endpoints: /users/me, /users (Admin CRUD)
+        ├── user.service.ts                 // Business logic User, kích hoạt/khóa tài khoản
+        └── user.module.ts
 ```
 
 ## Module backend

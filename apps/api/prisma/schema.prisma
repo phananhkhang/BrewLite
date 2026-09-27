@@ -1,316 +1,185 @@
-generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
-}
-
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-enum UserRole {
-  CUSTOMER
-  BARISTA
-  ADMIN
+generator client {
+  provider = "prisma-client-js"
 }
 
-enum ProductSize {
-  S
-  M
-  L
-}
-
-enum OrderStatus {
-  PENDING
-  PAYMENT_FAILED
-  PAID
-  PREPARING
-  READY
-  COMPLETED
-  CANCELLED
-}
-
-enum PaymentMethod {
-  E_WALLET
-  CARD
-}
-
-enum PaymentStatus {
-  PROCESSING
-  SUCCEEDED
-  FAILED
-}
-
-enum ReservationStatus {
+// ----------------------------------------------------
+// ENUMS
+// ----------------------------------------------------
+enum UserStatus {
   ACTIVE
-  CONSUMED
-  RELEASED
-  EXPIRED
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
 }
 
-enum DiscountType {
-  PERCENTAGE
-  FIXED_AMOUNT
+enum AuditLogStatus {
+  SUCCESS
+  FAILED
+  BLOCKED
 }
 
-enum CouponRedemptionStatus {
-  RESERVED
-  CONSUMED
-  RELEASED
-  EXPIRED
-}
-
-enum LoyaltyTransactionType {
-  EARN
-  REDEEM
-  ADJUSTMENT
-  REVERSAL
-}
-
+// ----------------------------------------------------
+// USER & IDENTITY MODELS
+// ----------------------------------------------------
 model User {
-  id             String   @id @default(uuid()) @db.Uuid
-  username       String   @unique @db.VarChar(100)
-  passwordHash   String   @map("password_hash") @db.VarChar(255)
-  role           UserRole @default(CUSTOMER)
-  loyaltyBalance Int      @default(0) @map("loyalty_balance")
-  isActive       Boolean  @default(true) @map("is_active")
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id               String       @id @default(uuid()) @db.Uuid
+  email            String       @unique @db.VarChar(255)
+  phone            String?      @unique @db.VarChar(20)
+  passwordHash     String       @map("password_hash") @db.VarChar(255)
+  firstName        String       @map("first_name") @db.VarChar(100)
+  lastName         String       @map("last_name") @db.VarChar(100)
+  avatarUrl        String?      @map("avatar_url") @db.VarChar(500)
+  status           UserStatus   @default(PENDING_VERIFICATION)
+  isEmailVerified  Boolean      @default(false) @map("is_email_verified")
+  lastLoginAt      DateTime?    @map("last_login_at") @db.Timestamptz
+  
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime     @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt        DateTime?    @map("deleted_at") @db.Timestamptz // Soft delete
 
-  orders                      Order[]
-  couponRedemptions           CouponRedemption[]
-  loyaltyTransactions         LoyaltyTransaction[]
-  changedOrderStatusHistories OrderStatusHistory[] @relation("OrderStatusChangedBy")
+  // Relations
+  userRoles           UserRole[]
+  sessions            UserSession[]
+  auditLogs           AuthAuditLog[]
+  passwordResetTokens PasswordResetToken[]
+  addresses           Address[]
 
+  @@index([status, createdAt(sort: Desc)])
+  @@index([email, deletedAt])
   @@map("users")
 }
 
-model Product {
+// ----------------------------------------------------
+// RBAC (ROLE-BASED ACCESS CONTROL)
+// ----------------------------------------------------
+model Role {
   id          String   @id @default(uuid()) @db.Uuid
-  sku         String   @unique @db.VarChar(50)
-  name        String   @db.VarChar(150)
-  description String?  @db.Text
-  imageUrl    String   @map("image_url") @db.VarChar(500)
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  code        String   @unique @db.VarChar(50) // e.g. "SUPER_ADMIN", "STORE_MANAGER", "CASHIER", "CUSTOMER"
+  name        String   @db.VarChar(100)
+  description String?  @db.VarChar(255)
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  variants        ProductVariant[]
-  productToppings ProductTopping[]
+  users       UserRole[]
+  permissions RolePermission[]
 
-  @@index([isActive, createdAt])
-  @@map("products")
+  @@map("roles")
 }
 
-model ProductVariant {
-  id        String      @id @default(uuid()) @db.Uuid
-  productId String      @map("product_id") @db.Uuid
-  size      ProductSize
-  price     BigInt
-  stock     Int
-  isActive  Boolean     @default(true) @map("is_active")
-  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+model Permission {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique @db.VarChar(100) // e.g. "pos:checkout", "inventory:inward_approve"
+  module      String   @db.VarChar(50)          // e.g. "POS", "INVENTORY", "USER_MGMT"
+  description String?  @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  product               Product                @relation(fields: [productId], references: [id], onDelete: Restrict)
-  orderItems            OrderItem[]
-  inventoryReservations InventoryReservation[]
+  roles       RolePermission[]
 
-  @@unique([productId, size])
-  @@index([productId, isActive])
-  @@map("product_variants")
+  @@index([module])
+  @@map("permissions")
 }
 
-model Topping {
+model UserRole {
+  userId    String   @map("user_id") @db.Uuid
+  roleId    String   @map("role_id") @db.Uuid
+  assignedAt DateTime @default(now()) @map("assigned_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String   @map("role_id") @db.Uuid
+  permissionId String   @map("permission_id") @db.Uuid
+  grantedAt    DateTime @default(now()) @map("granted_at") @db.Timestamptz
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+// ----------------------------------------------------
+// AUTH SESSIONS & REFRESH TOKENS (ROTATION & SECURITY)
+// ----------------------------------------------------
+model UserSession {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  refreshTokenHash String   @unique @map("refresh_token_hash") @db.VarChar(255)
+  tokenFamily      String   @map("token_family") @db.VarChar(100) // Tracing refresh chain
+  ipAddress        String?  @map("ip_address") @db.VarChar(45)
+  userAgent        String?  @map("user_agent") @db.Text
+  isRevoked        Boolean  @default(false) @map("is_revoked")
+  expiresAt        DateTime @map("expires_at") @db.Timestamptz
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRevoked])
+  @@index([tokenFamily])
+  @@map("user_sessions")
+}
+
+model PasswordResetToken {
   id        String   @id @default(uuid()) @db.Uuid
-  code      String   @unique @db.VarChar(50)
-  name      String   @db.VarChar(100)
-  price     BigInt
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash") @db.VarChar(255)
+  isUsed    Boolean  @default(false) @map("is_used")
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  productToppings   ProductTopping[]
-  orderItemToppings OrderItemTopping[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("toppings")
+  @@index([userId, isUsed])
+  @@map("password_reset_tokens")
 }
 
-model ProductTopping {
-  productId String @map("product_id") @db.Uuid
-  toppingId String @map("topping_id") @db.Uuid
+model AuthAuditLog {
+  id        String         @id @default(uuid()) @db.Uuid
+  userId    String?        @map("user_id") @db.Uuid
+  eventType String         @map("event_type") @db.VarChar(50) // "LOGIN_SUCCESS", "LOGIN_FAILED", "TOKEN_ROTATION_BREACH"
+  status    AuditLogStatus
+  ipAddress String?        @map("ip_address") @db.VarChar(45)
+  userAgent String?        @map("user_agent") @db.Text
+  details   Json?          @db.JsonB
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
-  topping Topping @relation(fields: [toppingId], references: [id], onDelete: Restrict)
-
-  @@id([productId, toppingId])
-  @@map("product_toppings")
-}
-
-model Order {
-  id                   String      @id @default(uuid()) @db.Uuid
-  orderNumber          String      @unique @map("order_number") @db.VarChar(30)
-  userId               String      @map("user_id") @db.Uuid
-  status               OrderStatus @default(PENDING)
-  subtotal             BigInt
-  discountAmount       BigInt      @default(0) @map("discount_amount")
-  total                BigInt
-  couponCodeSnapshot   String?     @map("coupon_code_snapshot") @db.VarChar(50)
-  reservationExpiresAt DateTime    @map("reservation_expires_at") @db.Timestamptz(6)
-  createdAt            DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt            DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  user                  User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
-  items                 OrderItem[]
-  payments              Payment[]
-  statusHistories       OrderStatusHistory[]
-  inventoryReservations InventoryReservation[]
-  couponRedemption      CouponRedemption?
-  loyaltyTransactions   LoyaltyTransaction[]
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt(sort: Desc)])
-  @@index([status, createdAt])
-  @@map("orders")
+  @@index([eventType, createdAt(sort: Desc)])
+  @@map("auth_audit_logs")
 }
 
-model OrderItem {
-  id                  String @id @default(uuid()) @db.Uuid
-  orderId             String @map("order_id") @db.Uuid
-  productVariantId    String @map("product_variant_id") @db.Uuid
-  productNameSnapshot String @map("product_name_snapshot") @db.VarChar(150)
-  variantNameSnapshot String @map("variant_name_snapshot") @db.VarChar(50)
-  unitPrice           BigInt @map("unit_price")
-  quantity            Int
+// ----------------------------------------------------
+// USER PROFILE / ADDRESSES
+// ----------------------------------------------------
+model Address {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  recipientName String  @map("recipient_name") @db.VarChar(100)
+  phone        String   @db.VarChar(20)
+  street       String   @db.VarChar(255)
+  ward         String?  @db.VarChar(100)
+  district     String   @db.VarChar(100)
+  city         String   @db.VarChar(100)
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  order             Order              @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  productVariant    ProductVariant     @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
-  orderItemToppings OrderItemTopping[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("order_items")
-}
-
-model OrderItemTopping {
-  id                  String @id @default(uuid()) @db.Uuid
-  orderItemId         String @map("order_item_id") @db.Uuid
-  toppingId           String @map("topping_id") @db.Uuid
-  toppingNameSnapshot String @map("topping_name_snapshot") @db.VarChar(100)
-  unitPrice           BigInt @map("unit_price")
-  quantity            Int
-
-  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
-  topping   Topping   @relation(fields: [toppingId], references: [id], onDelete: Restrict)
-
-  @@map("order_item_toppings")
-}
-
-model Payment {
-  id                   String        @id @default(uuid()) @db.Uuid
-  orderId              String        @map("order_id") @db.Uuid
-  idempotencyKey       String        @unique @map("idempotency_key") @db.VarChar(100)
-  requestHash          String        @map("request_hash") @db.Char(64)
-  method               PaymentMethod
-  status               PaymentStatus @default(PROCESSING)
-  amount               BigInt
-  gatewayTransactionId String?       @unique @map("gateway_transaction_id") @db.VarChar(100)
-  failureCode          String?       @map("failure_code") @db.VarChar(100)
-  processedAt          DateTime?     @map("processed_at") @db.Timestamptz(6)
-  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
-
-  @@index([orderId, createdAt(sort: Desc)])
-  @@map("payments")
-}
-
-model OrderStatusHistory {
-  id              String       @id @default(uuid()) @db.Uuid
-  orderId         String       @map("order_id") @db.Uuid
-  fromStatus      OrderStatus? @map("from_status")
-  toStatus        OrderStatus  @map("to_status")
-  changedByUserId String?      @map("changed_by_user_id") @db.Uuid
-  reason          String?      @db.VarChar(255)
-  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  order         Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  changedByUser User? @relation("OrderStatusChangedBy", fields: [changedByUserId], references: [id], onDelete: Restrict)
-
-  @@index([orderId, createdAt])
-  @@map("order_status_histories")
-}
-
-model InventoryReservation {
-  id               String            @id @default(uuid()) @db.Uuid
-  orderId          String            @map("order_id") @db.Uuid
-  productVariantId String            @map("product_variant_id") @db.Uuid
-  quantity         Int
-  status           ReservationStatus @default(ACTIVE)
-  expiresAt        DateTime          @map("expires_at") @db.Timestamptz(6)
-  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  order          Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
-
-  @@unique([orderId, productVariantId])
-  @@index([status, expiresAt])
-  @@map("inventory_reservations")
-}
-
-model Coupon {
-  id            String       @id @default(uuid()) @db.Uuid
-  code          String       @unique @db.VarChar(50)
-  discountType  DiscountType @map("discount_type")
-  discountValue BigInt       @map("discount_value")
-  maxDiscount   BigInt?      @map("max_discount")
-  minOrderValue BigInt       @default(0) @map("min_order_value")
-  usageLimit    Int?         @map("usage_limit")
-  perUserLimit  Int          @default(1) @map("per_user_limit")
-  startsAt      DateTime     @map("starts_at") @db.Timestamptz(6)
-  endsAt        DateTime     @map("ends_at") @db.Timestamptz(6)
-  isActive      Boolean      @default(true) @map("is_active")
-  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  redemptions CouponRedemption[]
-
-  @@map("coupons")
-}
-
-model CouponRedemption {
-  id             String                 @id @default(uuid()) @db.Uuid
-  couponId       String                 @map("coupon_id") @db.Uuid
-  userId         String                 @map("user_id") @db.Uuid
-  orderId        String                 @unique @map("order_id") @db.Uuid
-  discountAmount BigInt                 @map("discount_amount")
-  status         CouponRedemptionStatus @default(RESERVED)
-  expiresAt      DateTime               @map("expires_at") @db.Timestamptz(6)
-  consumedAt     DateTime?              @map("consumed_at") @db.Timestamptz(6)
-  releasedAt     DateTime?              @map("released_at") @db.Timestamptz(6)
-  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Restrict)
-  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
-  order  Order  @relation(fields: [orderId], references: [id], onDelete: Restrict)
-
-  @@index([couponId, userId, status])
-  @@index([status, expiresAt])
-  @@map("coupon_redemptions")
-}
-
-model LoyaltyTransaction {
-  id           String                 @id @default(uuid()) @db.Uuid
-  userId       String                 @map("user_id") @db.Uuid
-  orderId      String?                @map("order_id") @db.Uuid
-  type         LoyaltyTransactionType
-  points       Int
-  balanceAfter Int                    @map("balance_after")
-  reason       String                 @db.VarChar(255)
-  createdAt    DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  user  User   @relation(fields: [userId], references: [id], onDelete: Restrict)
-  order Order? @relation(fields: [orderId], references: [id], onDelete: Restrict)
-
-  @@index([userId, createdAt(sort: Desc)])
-  @@map("loyalty_transactions")
+  @@index([userId])
+  @@map("addresses")
 }
